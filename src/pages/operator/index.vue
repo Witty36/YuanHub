@@ -699,10 +699,18 @@
                       <strong>{{ selectedDiscLoadout.discNames.length }} / 3</strong>
                     </div>
                     <p v-if="!editingDiscs.length" class="hint">该密探暂无命盘目录数据，可直接留空保存。</p>
-                    <label v-for="d in editingDiscs" :key="discKey(d)" class="disc-option" :class="[discColorClass(d), { on: isDiscSelected(d) }]">
-                      <input type="checkbox" :checked="isDiscSelected(d)" @change="toggleDiscSelection(d, $event)" />
-                      <span class="disc-name disc-term-label" tabindex="0" @mouseenter="showDiscTooltip($event, discDescription(d))" @mouseleave="hideDiscTooltip" @focus="showDiscTooltip($event, discDescription(d))" @blur="hideDiscTooltip">{{ discKey(d) }}</span>
-                    </label>
+                    <div v-if="selectedEditingDiscs.length" class="disc-options-selected" aria-label="已选命盘">
+                      <label v-for="d in selectedEditingDiscs" :key="discKey(d)" class="disc-option" :class="[discColorClass(d), { on: isDiscSelected(d) }]">
+                        <input type="checkbox" :checked="isDiscSelected(d)" @change="toggleDiscSelection(d, $event)" />
+                        <span class="disc-name disc-term-label" tabindex="0" @mouseenter="showDiscTooltip($event, discDescription(d))" @mouseleave="hideDiscTooltip" @focus="showDiscTooltip($event, discDescription(d))" @blur="hideDiscTooltip">{{ discKey(d) }}</span>
+                      </label>
+                    </div>
+                    <div v-if="unselectedEditingDiscs.length" class="disc-options-rest" aria-label="可选命盘">
+                      <label v-for="d in unselectedEditingDiscs" :key="discKey(d)" class="disc-option" :class="[discColorClass(d), { on: isDiscSelected(d) }]">
+                        <input type="checkbox" :checked="isDiscSelected(d)" @change="toggleDiscSelection(d, $event)" />
+                        <span class="disc-name disc-term-label" tabindex="0" @mouseenter="showDiscTooltip($event, discDescription(d))" @mouseleave="hideDiscTooltip" @focus="showDiscTooltip($event, discDescription(d))" @blur="hideDiscTooltip">{{ discKey(d) }}</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -1268,6 +1276,14 @@ function sortDiscsForPicker(discs) {
 
 const editingDiscs = computed(function () {
   return sortDiscsForPicker((editingOp.value && editingOp.value.discs) || [])
+})
+
+const selectedEditingDiscs = computed(function () {
+  return editingDiscs.value.filter(function (disc) { return isDiscSelected(disc) })
+})
+
+const unselectedEditingDiscs = computed(function () {
+  return editingDiscs.value.filter(function (disc) { return !isDiscSelected(disc) })
 })
 
 function isMajorGoldDisc(disc) {
@@ -5253,6 +5269,9 @@ onBeforeUnmount(function () {
 .disc-auto-name:focus-visible { outline:2px solid var(--brand-blue); outline-offset:2px }
 .disc-auto-status { display: inline-flex; min-width: 0; min-height: 20px; align-items: center; overflow: hidden; padding: 2px 7px; border-radius: 999px; background: rgba(215, 137, 53, .12); color: var(--accent-strong); font-size: 9px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap }
 .disc-options { display: flex; width:100%; min-width:0; max-width:100%; flex-wrap: wrap; gap: 7px; padding-top: 10px }
+.disc-options-selected,
+.disc-options-rest { display: flex; flex-basis: 100%; min-width: 0; flex-wrap: wrap; gap: 7px }
+.disc-options-selected { margin-bottom: 2px }
 .disc-options-head { display: flex; flex-basis: 100%; align-items: center; justify-content: space-between; color: var(--ink-60); font-size: 10.5px; font-weight: 800 }
 .disc-options-head strong { color: var(--accent-strong); font-family: var(--font-d); font-size: 11px }
 .disc-options .hint { flex-basis: 100%; font-size: 11.5px; color: var(--ink-35) }
