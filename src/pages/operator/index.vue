@@ -452,7 +452,7 @@
                   <div class="ledger-destiny">
                     <div v-for="index in 2" :key="index" class="ledger-destiny-row ledger-popover-trigger" role="button" tabindex="0" :aria-expanded="cardPopoverKey === e.id + ':disc-' + (index - 1)" @click="openCardPopover(e, 'disc-' + (index - 1))" @keydown.enter.prevent="openCardPopover(e, 'disc-' + (index - 1))" @keydown.space.prevent="openCardPopover(e, 'disc-' + (index - 1))">
                       <span>命盘{{ index === 1 ? '一' : '二' }}</span>
-                      <div class="ledger-destiny-values"><template v-if="cardLoadoutDiscs(e, index - 1).length"><em v-for="disc in cardLoadoutDiscs(e, index - 1)" :key="disc" class="disc-term" :class="{ 'has-description': cardDiscDescription(e, disc) }" tabindex="0" @mouseenter.stop="showDiscTooltip($event, cardDiscDescription(e, disc))" @mouseleave="hideDiscTooltip" @focus="showDiscTooltip($event, cardDiscDescription(e, disc))" @blur="hideDiscTooltip">{{ disc }}</em></template><em v-else class="empty">+ 命盘</em></div>
+                      <div class="ledger-destiny-values"><template v-if="cardLoadoutDiscs(e, index - 1).length"><em v-for="disc in cardLoadoutDiscs(e, index - 1)" :key="disc" class="disc-term" :class="{ 'has-description': cardDiscDescription(e, disc) }" tabindex="0" @mouseenter.stop="showDiscTooltip($event, cardDiscDescription(e, disc))" @mouseleave="hideDiscTooltip" @focus="showDiscTooltip($event, cardDiscDescription(e, disc))" @blur="hideDiscTooltip">{{ discDisplayLabel(e, disc) }}</em></template><em v-else class="empty">+ 命盘</em></div>
                       <div v-if="cardPopoverKey === e.id + ':disc-' + (index - 1)" class="ledger-popover ledger-disc-popover" @click.stop>
                         <p><CircleAlert :size="13" aria-hidden="true" />编辑命盘{{ index === 1 ? '一' : '二' }}（最多 3 个）</p>
                         <div class="ledger-disc-options">
@@ -1190,6 +1190,17 @@ async function toggleAgentFavorite(entry) {
 function discKey(d) {
   if (!d) return ''
   return d.ot_name || d.otName || ''
+}
+
+function discDisplayName(d) {
+  if (!d) return ''
+  const abbreviation = String(d.abbreviation || '').trim()
+  return abbreviation || discKey(d)
+}
+
+function discDisplayLabel(e, key) {
+  const disc = cardDiscOptions(e).find(function (item) { return discKey(item) === key })
+  return disc ? discDisplayName(disc) : String(key || '')
 }
 
 function discDescription(disc) {
