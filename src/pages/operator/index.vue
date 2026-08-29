@@ -5262,6 +5262,8 @@ onBeforeUnmount(function () {
 .disc-option input { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap }
 .disc-option:has(input:focus-visible) { outline: 2px solid var(--brand-blue); outline-offset: 2px }
 .disc-option.on { background: var(--yellow); border-color: var(--yellow-deep); color: var(--ink) }
+.disc-option:not(.on) { opacity: .65 }
+.disc-option:not(.on):hover { opacity: .95 }
 /* 命盘品级色：金 / 紫 / 蓝（未选中=淡色底，选中=实色） */
 .disc-option.c-gold { background: rgba(215, 137, 53, .14); border-color: rgba(215, 137, 53, .55); color: #8a5a1f }
 .disc-option.c-gold.on { background: var(--accent); border-color: #b06f24; color: var(--cream) }
