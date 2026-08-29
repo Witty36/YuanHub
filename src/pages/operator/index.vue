@@ -4872,8 +4872,9 @@ onBeforeUnmount(function () {
 .ledger-grow-label { width:32px; flex:none; color:var(--ink-60); font-weight:700 }
 .ledger-editable { padding:0 2px; border:0; border-bottom:1px dashed var(--accent); background:transparent; color:var(--ink); font:700 13px var(--font-d); cursor:pointer }
 .ledger-editable:hover { color:var(--accent-strong) }
-.ledger-huaji-value { display:inline-flex; align-items:center; justify-content:center; gap:3px; line-height:1 }
-.ledger-huaji-value svg { display:block; width:12px; height:12px; flex:none; align-self:center; color:var(--yellow-deep) }
+.ledger-huaji-value { display:inline-flex; align-items:center; justify-content:center; gap:3px; line-height:1; vertical-align:middle }
+.ledger-huaji-value > span { display:inline-flex; align-items:center; line-height:1; white-space:nowrap }
+.ledger-huaji-value svg { display:inline-block; width:12px; height:12px; flex:none; align-self:center; margin-block:0; vertical-align:middle; color:var(--yellow-deep) }
 .ledger-step-actions { display:flex; gap:3px; margin-left:auto }
 .ledger-step-actions button,.ledger-next-action { border:1px solid var(--line); border-radius:4px; padding:3px 5px; background:var(--surface); color:var(--ink); font-size:10px; font-weight:800; text-align:center; cursor:pointer }
 .ledger-step-actions button:hover,.ledger-next-action:hover:not(:disabled) { border-color:var(--accent); background:var(--yellow) }
