@@ -183,6 +183,13 @@
                   <button v-for="s in subProfOptions" :key="s" type="button" :aria-pressed="subProfFilter === s" :class="{ on: subProfFilter === s }" @click="subProfFilter = s">{{ s }}</button>
                 </div>
               </div>
+              <div class="pf-row pf-quality-row">
+                <span class="pf-label">品质</span>
+                <div class="mf-filter" role="group" aria-label="按品质筛选密探图鉴">
+                  <button type="button" :aria-pressed="qualityFilter === 'all'" :class="{ on: qualityFilter === 'all' }" @click="qualityFilter = 'all'">全部</button>
+                  <button v-for="option in AGENT_QUALITY_OPTIONS" :key="option.value" type="button" :aria-pressed="qualityFilter === option.value" :class="{ on: qualityFilter === option.value }" @click="qualityFilter = option.value">{{ option.label }}</button>
+                </div>
+              </div>
             </div>
 
             <div v-if="catalogLoading" class="state">正在加载密探图鉴…</div>
@@ -322,6 +329,13 @@
                     <button v-for="s in subProfOptions" :key="s" type="button" :aria-pressed="subProfFilter === s" :class="{ on: subProfFilter === s }" @click="subProfFilter = s">{{ s }}</button>
                   </div>
                 </div>
+                <div class="pf-row pf-quality-row">
+                  <span class="pf-label">品质</span>
+                  <div class="mf-filter" role="group" aria-label="按品质筛选当前养成">
+                    <button type="button" :aria-pressed="qualityFilter === 'all'" :class="{ on: qualityFilter === 'all' }" @click="qualityFilter = 'all'">全部</button>
+                    <button v-for="option in AGENT_QUALITY_OPTIONS" :key="option.value" type="button" :aria-pressed="qualityFilter === option.value" :class="{ on: qualityFilter === option.value }" @click="qualityFilter = option.value">{{ option.label }}</button>
+                  </div>
+                </div>
                 <div class="pf-row pf-status-row">
                   <span class="pf-label">状态</span>
                   <div class="mf-filter current-status-filter" role="group" aria-label="按养成状态筛选当前养成">
@@ -357,7 +371,7 @@
             </div>
             <div v-else class="current-ledger" v-reveal>
               <div class="current-ledger-meta">
-                <span>版本「{{ gameFilter }}」<template v-if="profFilter !== 'all'"> · 属性「{{ profFilter }}」</template><template v-if="subProfFilter !== 'all'"> · 职业「{{ subProfFilter }}」</template><template v-if="workbenchStatusFilter !== 'all'"> · 状态「{{ statusLabel(workbenchStatusFilter) }}」</template><template v-if="upgradeReadyFilter === 'growth'"> · 仅看「等级/修为可提升」</template><template v-else-if="upgradeReadyFilter === 'huaji'"> · 仅看「可提升化极」</template></span>
+                <span>版本「{{ gameFilter }}」<template v-if="profFilter !== 'all'"> · 属性「{{ profFilter }}」</template><template v-if="subProfFilter !== 'all'"> · 职业「{{ subProfFilter }}」</template><template v-if="qualityFilter !== 'all'"> · 品质「{{ qualityLabel(qualityFilter) }}」</template><template v-if="workbenchStatusFilter !== 'all'"> · 状态「{{ statusLabel(workbenchStatusFilter) }}」</template><template v-if="upgradeReadyFilter === 'growth'"> · 仅看「等级/修为可提升」</template><template v-else-if="upgradeReadyFilter === 'huaji'"> · 仅看「可提升化极」</template></span>
                 <span>快捷提升会真实扣除库存；手动校正与完整编辑不扣库存</span>
               </div>
               <div v-if="filteredCurrent.length === 0" class="state slim">没有匹配{{ currentFilterSuffix }}的已招募密探</div>
@@ -887,10 +901,16 @@ const manifestSearch = ref('')
 const manifestFilter = ref('all')
 const profFilter = ref('all')
 const subProfFilter = ref('all')
+const qualityFilter = ref('all')
 const workbenchStatusFilter = ref('all')
 const upgradeReadyFilter = ref('')
 const favoriteFirst = ref(false)
 const profOptions = AGENT_PROFS
+const AGENT_QUALITY_OPTIONS = [
+  { value: 5, label: '绝密' },
+  { value: 4, label: '机密' },
+  { value: 3, label: '隐密' }
+]
 const subProfOptions = computed(function () { return deriveSubProfOptions(catalogOperators.value) })
 const workbenchStatusOptions = [
   { value: 'all', label: '全部' },
@@ -1837,6 +1857,7 @@ const manifestEntries = computed(function () {
     .filter(function (e) {
       if (!matchesGame(e, gameFilter.value)) return false
       if (!matchesProfSubFilter(e, profFilter.value, subProfFilter.value)) return false
+      if (qualityFilter.value !== 'all' && Number(e.rarity) !== Number(qualityFilter.value)) return false
       if (f === 'owned' && !e.owned) return false
       if (f === 'missing' && e.owned) return false
       if (q) {
@@ -1862,10 +1883,16 @@ const filterSuffix = computed(function () {
   parts.push('版本「' + gameFilter.value + '」')
   if (profFilter.value !== 'all') parts.push('属性「' + profFilter.value + '」')
   if (subProfFilter.value !== 'all') parts.push('职业「' + subProfFilter.value + '」')
+  if (qualityFilter.value !== 'all') parts.push('品质「' + qualityLabel(qualityFilter.value) + '」')
   if (manifestFilter.value === 'owned') parts.push('「已拥有」')
   if (manifestFilter.value === 'missing') parts.push('「未拥有」')
   return parts.length ? parts.join(' · ') : ''
 })
+
+function qualityLabel(value) {
+  const option = AGENT_QUALITY_OPTIONS.find(function (item) { return item.value === Number(value) })
+  return option ? option.label : String(value)
+}
 
 // 当前养成首要口径：只展示已拥有，再叠加属性 / 职业筛选。
 const ownedCurrentEntries = computed(function () {
@@ -1948,6 +1975,7 @@ const filteredCurrent = computed(function () {
   const quickKeys = Array.from(activeQuickFilterKeys.value)
   return ownedCurrentEntries.value.filter(function (e) {
     return matchesProfSubFilter(e, profFilter.value, subProfFilter.value) &&
+      (qualityFilter.value === 'all' || Number(e.rarity) === Number(qualityFilter.value)) &&
       (workbenchStatusFilter.value === 'all' || operatorStatus(e) === workbenchStatusFilter.value) &&
       (!upgradeReadyFilter.value || activeUpgradeReadyIds.value.has(e.id)) &&
       (quickKeys.length === 0 || quickKeys.every(function (key) {
@@ -1981,6 +2009,7 @@ const currentFilterSuffix = computed(function () {
   parts.push('版本「' + gameFilter.value + '」')
   if (profFilter.value !== 'all') parts.push('属性「' + profFilter.value + '」')
   if (subProfFilter.value !== 'all') parts.push('职业「' + subProfFilter.value + '」')
+  if (qualityFilter.value !== 'all') parts.push('品质「' + qualityLabel(qualityFilter.value) + '」')
   if (workbenchStatusFilter.value !== 'all') parts.push('状态「' + statusLabel(workbenchStatusFilter.value) + '」')
   if (upgradeReadyFilter.value === 'growth') parts.push('「等级/修为可提升」')
   if (upgradeReadyFilter.value === 'huaji') parts.push('「可提升化极」')
@@ -1993,12 +2022,13 @@ const currentFilterSuffix = computed(function () {
 })
 
 const hasCurrentFilters = computed(function () {
-  return profFilter.value !== 'all' || subProfFilter.value !== 'all' || workbenchStatusFilter.value !== 'all' || Boolean(upgradeReadyFilter.value) || activeQuickFilterKeys.value.size > 0
+  return profFilter.value !== 'all' || subProfFilter.value !== 'all' || qualityFilter.value !== 'all' || workbenchStatusFilter.value !== 'all' || Boolean(upgradeReadyFilter.value) || activeQuickFilterKeys.value.size > 0
 })
 
 function resetCurrentFilters() {
   profFilter.value = 'all'
   subProfFilter.value = 'all'
+  qualityFilter.value = 'all'
   workbenchStatusFilter.value = 'all'
   upgradeReadyFilter.value = ''
   activeQuickFilterKeys.value = new Set()
@@ -4029,6 +4059,7 @@ async function focusAndFlashScanOperator(operatorId, effect) {
     manifestFilter.value = 'all'
     profFilter.value = 'all'
     subProfFilter.value = 'all'
+    qualityFilter.value = 'all'
   }
   await nextTick()
   if (focusSeq !== scanFocusSeq) return
@@ -5369,6 +5400,7 @@ onBeforeUnmount(function () {
   .catalog-prof-filter .pf-row .mf-filter { display:grid; width:100%; box-sizing:border-box; gap:3px; padding:3px; }
   .catalog-prof-filter .pf-prof-row .mf-filter { grid-template-columns:repeat(8,minmax(0,1fr)); }
   .catalog-prof-filter .pf-subprof-row .mf-filter { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  .catalog-prof-filter .pf-quality-row .mf-filter { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .catalog-prof-filter .mf-filter button { width:100%; min-width:0; min-height:34px; padding:4px 2px; border-radius:6px; font-size:10.5px; line-height:1; white-space:nowrap; touch-action:manipulation; }
   .current-prof-filter { padding:0; gap:0; }
   .current-filter-head { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:6px; padding:8px 9px; }
@@ -5393,6 +5425,7 @@ onBeforeUnmount(function () {
   .current-prof-filter .pf-row .mf-filter { display:grid; width:100%; box-sizing:border-box; gap:3px; padding:3px; }
   .current-prof-filter .pf-prof-row .mf-filter { grid-template-columns:repeat(8,minmax(0,1fr)); }
   .current-prof-filter .pf-subprof-row .mf-filter { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  .current-prof-filter .pf-quality-row .mf-filter { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .current-prof-filter .pf-status-row .mf-filter { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .current-prof-filter .mf-filter button { width:100%; min-width:0; min-height:34px; gap:2px; padding:4px 2px; border-radius:6px; font-size:10.5px; line-height:1; white-space:nowrap; touch-action:manipulation; }
   .catalog-prof-filter .pf-prof-row .mf-filter button img,
