@@ -1571,7 +1571,7 @@ function normalizeEntry(e, odditySchema) {
 }
 
 // 修为与等级关系（参考 MaaYuan-Share-frontend operatorRequirementModel）：
-// 每 5 级增加 1 点修为上限，100 级时上限为 17。
+// 技能等级分段：1-9→1，10-14→2，15-29→3，30-39→4，40+→⌊x/5⌋-3。
 const OPERATOR_LEVEL_MAX = 100
 const OPERATOR_ELITE_MAX = 17
 
@@ -1580,10 +1580,14 @@ function getMaxEliteForLevel(level) {
     OPERATOR_LEVEL_MAX,
     Math.max(0, Math.trunc(Number(level) || 0))
   )
-  return Math.min(
-    OPERATOR_ELITE_MAX,
-    Math.max(0, Math.floor(normalizedLevel / 5) - 3)
-  )
+  if (normalizedLevel <= 0) return 0
+  if (normalizedLevel >= 40) {
+    return Math.min(OPERATOR_ELITE_MAX, Math.max(0, Math.floor(normalizedLevel / 5) - 3))
+  }
+  if (normalizedLevel >= 30) return 4
+  if (normalizedLevel >= 15) return 3
+  if (normalizedLevel >= 10) return 2
+  return 1
 }
 
 // 修为材料按密探属性归入三类职业；与养成追踪组件保持同一映射。

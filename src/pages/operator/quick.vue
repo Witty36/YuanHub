@@ -214,10 +214,14 @@ function getMaxEliteForLevel(level) {
     OPERATOR_LEVEL_MAX,
     Math.max(0, Math.trunc(Number(level) || 0))
   )
-  return Math.min(
-    OPERATOR_ELITE_MAX,
-    Math.max(0, Math.floor(normalizedLevel / 5) - 3)
-  )
+  if (normalizedLevel <= 0) return 0
+  if (normalizedLevel >= 40) {
+    return Math.min(OPERATOR_ELITE_MAX, Math.max(0, Math.floor(normalizedLevel / 5) - 3))
+  }
+  if (normalizedLevel >= 30) return 4
+  if (normalizedLevel >= 15) return 3
+  if (normalizedLevel >= 10) return 2
+  return 1
 }
 
 // —— 步骤定义 ——

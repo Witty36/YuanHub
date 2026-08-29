@@ -73,7 +73,7 @@
             </div>
             <div class="tracker-targets" aria-label="设置养成目标">
               <label>目标等级 <input type="number" :min="row.level" max="100" :value="targetFor(row).level" :disabled="targetLoading || targetBusyIds.has(row.id)" @change="setTarget(row, 'level', $event)" /></label>
-              <label>目标修为 <input type="number" :min="row.elite" max="17" :value="targetFor(row).elite" :disabled="targetLoading || targetBusyIds.has(row.id)" @change="setTarget(row, 'elite', $event)" /></label>
+              <label>目标修为 <input type="number" :min="row.elite" :max="maxEliteForLevel(row.level)" :value="targetFor(row).elite" :disabled="targetLoading || targetBusyIds.has(row.id)" @change="setTarget(row, 'elite', $event)" /></label>
               <label>目标节点
                 <select :value="targetFor(row).starLevel" :disabled="targetLoading || targetBusyIds.has(row.id)" @change="setTarget(row, 'starLevel', $event)">
                   <option v-for="stage in starStagesFor(row)" :key="stage.value" :value="stage.value">{{ stage.label }}</option>
@@ -371,6 +371,16 @@ function defaultTarget(row) {
   return { level: 100, elite: 17, starLevel: 7, heartPaper: null, revision: 0 }
 }
 
+function maxEliteForLevel(level) {
+  const n = Math.min(100, Math.max(0, Math.trunc(Number(level) || 0)))
+  if (n <= 0) return 0
+  if (n >= 40) return Math.min(17, Math.max(0, Math.floor(n / 5) - 3))
+  if (n >= 30) return 4
+  if (n >= 15) return 3
+  if (n >= 10) return 2
+  return 1
+}
+
 function targetFor(row) {
   if (!row || !row.id) return defaultTarget(row)
   const saved = targets.value[row.id] || defaultTarget(row)
@@ -378,7 +388,7 @@ function targetFor(row) {
   const currentLevel = Number(row.level) || 0
   const currentElite = Number(row.elite) || 0
   const level = Math.max(currentLevel, Math.min(100, Number(saved.level == null ? defaults.level : saved.level) || 0))
-  const eliteLimit = Math.min(17, Math.max(0, Math.floor(level / 5) - 3))
+  const eliteLimit = maxEliteForLevel(level)
   const elite = Math.max(currentElite, Math.min(eliteLimit, Number(saved.elite == null ? defaults.elite : saved.elite) || 0))
   const savedStarLevel = Math.min(31, Math.max(0, Number(saved.starLevel == null ? defaults.starLevel : saved.starLevel) || 0))
   const currentStarLevel = Number(row.starLevel) || 0
@@ -396,7 +406,7 @@ async function setTarget(row, field, event) {
   const max = field === 'level' ? 100 : field === 'elite' ? 17 : field === 'heartPaper' ? 1000000 : 31
   const currentValue = field === 'heartPaper' ? 0 : Number(current[field]) || 0
   target[field] = Math.min(max, Math.max(currentValue, Number(raw) || 0))
-  const eliteLimit = Math.min(17, Math.max(0, Math.floor((target.level || 0) / 5) - 3))
+  const eliteLimit = maxEliteForLevel(target.level || 0)
   if (field === 'elite') target[field] = Math.max(Number(current.elite) || 0, Math.min(target[field], eliteLimit))
   if (field === 'level') target.elite = Math.max(Number(current.elite) || 0, Math.min(target.elite, eliteLimit))
   const previous = targets.value[id]
