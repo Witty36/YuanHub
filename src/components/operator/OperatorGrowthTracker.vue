@@ -158,7 +158,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="hasViewFilters" class="tracker-view-results">
+            <div class="tracker-view-results">
               <button v-for="op in viewSearchOptions" :key="op.id" type="button" class="tracker-view-result" :class="[{ on: isViewSelected(op.id) }, 'rarity-r' + (op.rarity || 3)]" @click="addToEditorAndGroup(op)">
                 <span class="tracker-avatar">
                   <img v-if="op.avatar" :src="avatarUrl(op.avatar)" :alt="op.name" loading="lazy" />
@@ -170,13 +170,33 @@
               </button>
               <p v-if="!viewSearchOptions.length" class="tracker-view-empty">没有匹配的密探</p>
             </div>
-            <p v-else class="editor-groups-hint">使用上方搜索或属性/职业筛选拉取密探；点选后会出现在下方已选列表。</p>
-            <div v-if="selectedViewOperators.length" class="tracker-view-selected">
-              <div class="tracker-view-selected-head">
-                <strong>已选 {{ selectedViewOperators.length }} 位密探</strong>
-                <button type="button" class="tracker-view-clear" @click="clearViewSelected">清空</button>
+            <div class="editor-groups">
+              <div class="editor-groups-head">
+                <h3>养成分组</h3>
+                <div class="group-create">
+                  <input v-model.trim="viewerGroupName" type="text" placeholder="分组名称" aria-label="分组名称" />
+                  <button type="button" @click="createViewerGroup">新建分组</button>
+                </div>
               </div>
-              <div v-for="op in selectedViewOperators" :key="op.id" class="tracker-view-edit-row">
+              <p v-if="!viewerGroups.length" class="editor-groups-hint">先新建一个分组，再点上方密探卡片加入该组并编辑目标。</p>
+              <div class="editor-groups-list">
+                <span class="editor-group-chip ungrouped" :class="{ active: viewerActiveGroupId === VIEWER_UNGROUPED_ID }" @click="viewerActiveGroupId = VIEWER_UNGROUPED_ID">
+                  <b>默认分组</b>
+                  <em>{{ viewerUngroupedIds.size }} 位</em>
+                </span>
+                <span v-for="group in viewerGroups" :key="group.id" class="editor-group-chip" :class="{ active: viewerActiveGroupId === group.id }" @click="viewerActiveGroupId = group.id">
+                  <b>{{ group.name }}</b>
+                  <em>{{ (group.operatorIds || []).length }} 位</em>
+                </span>
+              </div>
+              <p class="editor-groups-hint">点选分组后，上方密探会加入该组；未选择分组时，密探会出现在默认分组。</p>
+            </div>
+            <div v-if="viewerActiveGroupEntries.length" class="tracker-view-selected">
+              <div class="tracker-view-selected-head">
+                <strong>{{ viewerActiveGroup ? viewerActiveGroup.name : '分组' }} · {{ viewerActiveGroupEntries.length }} 位密探</strong>
+                <button type="button" class="tracker-view-clear" @click="clearActiveGroupView">清空分组</button>
+              </div>
+              <div v-for="op in viewerActiveGroupEntries" :key="op.id" class="tracker-view-edit-row">
                 <div class="tracker-view-edit-head">
                   <div class="tracker-avatar" :class="'rarity-r' + (op.rarity || 3)">
                     <img v-if="op.avatar" :src="avatarUrl(op.avatar)" :alt="op.name" loading="lazy" />
@@ -191,37 +211,11 @@
                 <label>目标修为 <input v-model.number="viewDraft[op.id].elite" type="number" min="0" max="17" @input="markViewChanged(op.id)" /></label>
                 <div class="tracker-view-row-actions">
                   <button type="button" class="row-save" :class="{ done: viewCompletedIds.has(op.id) }" :disabled="viewSaving || viewSavedIds.has(op.id) || viewCompletedIds.has(op.id)" @click="saveViewRow('growth', op.id)">{{ viewSavedIds.has(op.id) ? '保存中…' : '保存' }}</button>
-                  <button type="button" class="row-delete" :disabled="viewSaving || viewSavedIds.has(op.id)" @click="deleteViewRow(op.id)">删除</button>
+                  <button type="button" class="row-delete" :disabled="viewSaving || viewSavedIds.has(op.id)" @click="removeGroupMemberData(op.id)">删除</button>
                 </div>
               </div>
             </div>
-            <div class="editor-groups">
-              <div class="editor-groups-head">
-                <h3>活动/关卡分组</h3>
-                <div class="group-create">
-                  <input v-model.trim="viewerGroupName" type="text" placeholder="分组名称" aria-label="分组名称" />
-                  <button type="button" @click="createViewerGroup">新建分组</button>
-                </div>
-              </div>
-              <p v-if="!viewerGroups.length" class="editor-groups-hint">还没有分组。先新建一个分组，再点上方密探卡片，就能直接把密探放进该组并编辑目标。</p>
-              <div v-else class="editor-groups-list">
-                <span v-for="group in viewerGroups" :key="group.id" class="editor-group-chip" :class="{ active: viewerActiveGroupId === group.id }" @click="viewerActiveGroupId = group.id">
-                  <b>{{ group.name }}</b>
-                  <em>{{ (group.operatorIds || []).length }} 位</em>
-                  <input v-model="group.name" type="text" :aria-label="'改分组名 ' + group.name" @click.stop @keydown.enter.stop="updateViewerGroupName(group)" />
-                  <label @click.stop><input type="checkbox" :checked="viewerSelectedGroupIds.has(group.id)" @change="toggleViewerGroupSelected(group.id)" />并集</label>
-                  <button type="button" @click.stop="removeViewerGroup(group.id)">删</button>
-                </span>
-              </div>
-              <div v-if="viewerActiveGroup && viewerActiveGroup.operatorIds.length" class="editor-group-members">
-                <span v-for="id in viewerActiveGroup.operatorIds" :key="id" class="group-member-chip">
-                  {{ memberName(id) }}
-                  <em v-if="groupTargetText(viewerActiveGroup.id, id)">{{ groupTargetText(viewerActiveGroup.id, id) }}</em>
-                  <button type="button" :aria-label="'从组移除' + memberName(id)" title="移出分组" @click="toggleViewerGroupMember(viewerActiveGroup, id)">×</button>
-                </span>
-              </div>
-              <p class="editor-groups-hint" v-if="viewerGroups.length">当前加入目标：{{ viewerActiveGroup ? viewerActiveGroup.name : '请点击一个分组' }}；保存目标后分组也会保留。</p>
-            </div>
+            <p v-else class="editor-groups-hint">该分组还没有密探，从上方筛选面板选择密探加入。</p>
             <div class="tracker-view-actions">
               <button type="button" class="tracker-view-save-all" :disabled="viewSaving" @click="saveViewTarget('growth')">{{ viewSaving ? '保存中…' : '编辑完成（' + selectedViewOperators.length + '）' }}</button>
             </div>
@@ -239,6 +233,25 @@
             </div>
             <p class="aggregate-eta">{{ growthAggregateEtaLabel }}</p>
           </section>
+          <section v-if="allGroupBoard.rows.length" class="group-stats-page">
+            <div class="aggregate-head">
+              <div><h3>总看板</h3><p>统计所有分组、所有密探的最高目标的情况，未加入分组的密探也一并统计。</p></div>
+              <span>缺项 {{ allGroupBoard.aggregate.gapCount }} · 五铢钱 {{ formatMoney(allGroupBoard.aggregate.total.money) }}</span>
+            </div>
+            <div v-if="!allGroupBoard.aggregate.gapCount" class="materials-clear">当前全局目标材料已备齐</div>
+            <div v-else class="material-chips">
+              <span v-for="gap in allGroupBoard.aggregate.gaps" :key="gap.id" class="material-chip">
+                <b>{{ itemName(gap.id) }}</b><em>缺 {{ formatNumber(gap.gap) }}</em><small>{{ rateLabel(gap.id) }}</small>
+              </span>
+            </div>
+            <div class="group-union-rows">
+              <span v-for="row in allGroupBoard.rows" :key="row.id" class="group-union-row">
+                <b>{{ row.name || row.id }}</b>
+                <em>{{ row.targetText }}</em>
+                <small>{{ row.gapText }}</small>
+              </span>
+            </div>
+          </section>
           <section v-if="viewerGroupStatCards.length" class="group-stats-page">
             <div class="aggregate-head">
               <div><h3>分组缺口</h3><p>每个分组各自缺多少，按组内已保存目标计算；同一密探可同时出现在多个活动分组。</p></div>
@@ -246,8 +259,14 @@
             <div class="group-stats-grid">
               <article v-for="card in viewerGroupStatCards" :key="card.id" class="group-stats-card">
                 <div class="group-stats-head">
-                  <h4>{{ card.name }}</h4>
+                  <input v-if="viewerEditingGroupId === card.id" v-model="card.group.name" type="text" class="group-stats-name-input" @keydown.enter="updateViewerGroupName(card.group); viewerEditingGroupId = ''" @blur="updateViewerGroupName(card.group); viewerEditingGroupId = ''" />
+                  <h4 v-else>{{ card.name }}</h4>
                   <span>{{ card.count }} 位密探</span>
+                  <label class="group-stats-union-check" title="把该分组纳入并集统计"><input type="checkbox" :checked="viewerSelectedGroupIds.has(card.id)" @change="toggleViewerGroupSelected(card.id)" />并集</label>
+                  <span class="group-stats-controls">
+                    <button type="button" title="重命名" @click="viewerEditingGroupId = card.id">✎</button>
+                    <button type="button" title="删除分组" @click="removeViewerGroup(card.id)">✕</button>
+                  </span>
                 </div>
                 <div v-if="!card.aggregate.gapCount" class="materials-clear">该分组材料已备齐</div>
                 <div v-else class="material-chips">
@@ -266,7 +285,7 @@
             </div>
             <section v-if="selectedGroupAggregate" class="group-stats-union">
               <div class="aggregate-head">
-                <div><h3>选中分组并集</h3><p>{{ selectedGroupIdsLabel }}，重叠密探取最高目标；未勾选的分组不计入。</p></div>
+                <div><h3>选中分组统计</h3><p>{{ selectedGroupIdsLabel }}，重叠密探取最高目标；未勾选的分组不计入。</p></div>
                 <span>缺项 {{ selectedGroupAggregate.gapCount }} · 五铢钱 {{ formatMoney(selectedGroupAggregate.total.money) }}</span>
               </div>
               <div v-if="!selectedGroupAggregate.gapCount" class="materials-clear">所选分组材料已备齐</div>
@@ -277,25 +296,6 @@
               </div>
               <div class="group-union-rows">
                 <span v-for="row in selectedGroupRows" :key="row.id" class="group-union-row">
-                  <b>{{ row.name || row.id }}</b>
-                  <em>{{ row.targetText }}</em>
-                  <small>{{ row.gapText }}</small>
-                </span>
-              </div>
-            </section>
-            <section v-if="allGroupBoard.rows.length" class="group-stats-union">
-              <div class="aggregate-head">
-                <div><h3>全部分组 + 未分组总看板</h3><p>所有分组并集取最高目标，未加入分组的密探也一并统计。</p></div>
-                <span>缺项 {{ allGroupBoard.aggregate.gapCount }} · 五铢钱 {{ formatMoney(allGroupBoard.aggregate.total.money) }}</span>
-              </div>
-              <div v-if="!allGroupBoard.aggregate.gapCount" class="materials-clear">当前全局目标材料已备齐</div>
-              <div v-else class="material-chips">
-                <span v-for="gap in allGroupBoard.aggregate.gaps" :key="gap.id" class="material-chip">
-                  <b>{{ itemName(gap.id) }}</b><em>缺 {{ formatNumber(gap.gap) }}</em><small>{{ rateLabel(gap.id) }}</small>
-                </span>
-              </div>
-              <div class="group-union-rows">
-                <span v-for="row in allGroupBoard.rows" :key="row.id" class="group-union-row">
                   <b>{{ row.name || row.id }}</b>
                   <em>{{ row.targetText }}</em>
                   <small>{{ row.gapText }}</small>
@@ -361,7 +361,7 @@
                 </div>
               </div>
             </div>
-            <div v-if="hasViewFilters" class="tracker-view-results">
+            <div class="tracker-view-results">
               <button v-for="op in viewSearchOptions" :key="op.id" type="button" class="tracker-view-result" :class="[{ on: isViewSelected(op.id) }, 'rarity-r' + (op.rarity || 3)]" @click="selectViewOperator(op)">
                 <span class="tracker-avatar">
                   <img v-if="op.avatar" :src="avatarUrl(op.avatar)" :alt="op.name" loading="lazy" />
@@ -373,7 +373,6 @@
               </button>
               <p v-if="!viewSearchOptions.length" class="tracker-view-empty">没有匹配的密探</p>
             </div>
-            <p v-else class="editor-groups-hint">使用上方搜索或属性/职业筛选拉取密探；点选后会出现在下方已选列表。</p>
             <div v-if="selectedViewOperators.length" class="tracker-view-selected">
               <div class="tracker-view-selected-head">
                 <strong>已选 {{ selectedViewOperators.length }} 位密探</strong>
@@ -488,8 +487,11 @@ const viewSearch = ref('')
 const viewProfFilter = ref('all')
 const viewSubProfFilter = ref('all')
 const viewerGroups = ref([])
+const VIEWER_UNGROUPED_ID = '__ungrouped__'
+const viewerUngroupedIds = ref(new Set())
 const viewerGroupName = ref('')
 const viewerActiveGroupId = ref('')
+const viewerEditingGroupId = ref('')
 const viewerSelectedGroupIds = ref(new Set())
 const viewerGroupPickerQuery = ref('')
 const viewerGroupProfFilter = ref('all')
@@ -784,7 +786,10 @@ const viewerGroupPickerOptions = computed(function () {
 })
 
 const viewerGroupSubProfOptions = computed(function () { return subProfOptions(props.catalogEntries) })
-const viewerActiveGroup = computed(function () { return groupById.value[viewerActiveGroupId.value] || null })
+const viewerActiveGroup = computed(function () {
+  if (viewerActiveGroupId.value === VIEWER_UNGROUPED_ID) return { id: VIEWER_UNGROUPED_ID, name: '未分组', operatorIds: [] }
+  return groupById.value[viewerActiveGroupId.value] || null
+})
 
 const groupMemberEntries = computed(function () {
   const byId = {}
@@ -793,7 +798,12 @@ const groupMemberEntries = computed(function () {
   viewerGroups.value.forEach(function (group) {
     map[group.id] = (group.operatorIds || []).map(function (id) { return byId[id] }).filter(Boolean)
   })
+  map[VIEWER_UNGROUPED_ID] = Array.from(viewerUngroupedIds.value).map(function (id) { return byId[id] }).filter(Boolean)
   return map
+})
+
+const viewerActiveGroupEntries = computed(function () {
+  return groupMemberEntries.value[viewerActiveGroupId.value] || []
 })
 
 const viewerGroupStatCards = computed(function () {
@@ -802,6 +812,7 @@ const viewerGroupStatCards = computed(function () {
     return {
       id: group.id,
       name: group.name || group.id,
+      group: group,
       count: (group.operatorIds || []).length,
       rows: rows,
       aggregate: aggregateForRows(groupRowsFor(group, null))
@@ -968,19 +979,30 @@ function viewerGroupsStorageKey() { return 'yuanhub:growth-groups:' + props.acco
 function loadViewerGroups() {
   if (typeof localStorage === 'undefined' || !props.accountId) return
   try {
-    const parsed = JSON.parse(localStorage.getItem(viewerGroupsStorageKey()) || '[]')
-    if (Array.isArray(parsed)) viewerGroups.value = parsed
+    const parsed = JSON.parse(localStorage.getItem(viewerGroupsStorageKey()) || '{}')
+    if (Array.isArray(parsed)) {
+      viewerGroups.value = parsed
+      viewerUngroupedIds.value = new Set()
+    } else {
+      if (Array.isArray(parsed && parsed.groups)) viewerGroups.value = parsed.groups
+      const raw = Array.isArray(parsed && parsed.ungrouped) ? parsed.ungrouped : []
+      viewerUngroupedIds.value = new Set(raw)
+    }
   } catch (_) {}
 }
 
 function persistViewerGroups() {
   if (typeof localStorage === 'undefined' || !props.accountId) return
-  try { localStorage.setItem(viewerGroupsStorageKey(), JSON.stringify(viewerGroups.value)) } catch (_) {}
+  try {
+    const data = { groups: viewerGroups.value, ungrouped: Array.from(viewerUngroupedIds.value) }
+    localStorage.setItem(viewerGroupsStorageKey(), JSON.stringify(data))
+  } catch (_) {}
 }
 
-watch(viewerGroups, persistViewerGroups, { deep: true })
+watch([viewerGroups, viewerUngroupedIds], persistViewerGroups, { deep: true })
 watch(function () { return props.accountId }, function () {
   viewerGroups.value = []
+  viewerUngroupedIds.value = new Set()
   loadViewerGroups()
 })
 
@@ -1004,6 +1026,17 @@ function updateViewerGroupName(group) {
 
 function toggleViewerGroupMember(group, id) {
   const member = viewerGroupHasMember(group, id)
+  if (group && group.id === VIEWER_UNGROUPED_ID) {
+    if (member) {
+      const next = new Set(viewerUngroupedIds.value)
+      next.delete(id)
+      viewerUngroupedIds.value = next
+    } else {
+      viewerUngroupedIds.value = new Set(viewerUngroupedIds.value).add(id)
+      viewerGroups.value.forEach(function (item) { removeGroupMember(item.id, id) })
+    }
+    return
+  }
   if (member) removeGroupMember(group.id, id)
   else addGroupMember(group.id, id)
 }
@@ -1012,6 +1045,8 @@ function addToEditorAndGroup(entry) {
   if (!entry || !entry.id) return
   if (viewDraft.value[entry.id]) {
     removeViewOperator(entry.id)
+    viewerUngroupedIds.value = new Set(viewerUngroupedIds.value)
+    viewerUngroupedIds.value.delete(entry.id)
     viewerGroups.value.forEach(function (group) {
       if ((group.operatorIds || []).indexOf(entry.id) !== -1) removeGroupMember(group.id, entry.id)
     })
@@ -1019,11 +1054,19 @@ function addToEditorAndGroup(entry) {
   }
   selectViewOperator(entry)
   if (viewerActiveGroup.value) {
-    addGroupMember(viewerActiveGroup.value.id, entry.id)
+    if (viewerActiveGroup.value.id === VIEWER_UNGROUPED_ID) {
+      viewerUngroupedIds.value = new Set(viewerUngroupedIds.value).add(entry.id)
+      viewerGroups.value.forEach(function (group) { removeGroupMember(group.id, entry.id) })
+    } else {
+      addGroupMember(viewerActiveGroup.value.id, entry.id)
+    }
   }
 }
 
 function addGroupMember(groupId, id) {
+  const ungrouped = new Set(viewerUngroupedIds.value)
+  ungrouped.delete(id)
+  viewerUngroupedIds.value = ungrouped
   const next = viewerGroups.value.map(function (group) {
     if (group.id !== groupId) return group
     const ids = (group.operatorIds || []).slice()
@@ -1042,12 +1085,63 @@ function removeGroupMember(groupId, id) {
   viewerGroups.value = next.slice()
 }
 
-function removeViewerGroup(id) {
-  viewerGroups.value = viewerGroups.value.filter(function (group) { return group.id !== id })
-  if (viewerActiveGroupId.value === id) viewerActiveGroupId.value = ''
+async function removeViewerGroup(id) {
+  const group = viewerGroups.value.find(function (item) { return item.id === id })
+  const memberIds = (group && group.operatorIds) ? group.operatorIds.slice() : []
+  viewerGroups.value = viewerGroups.value.filter(function (item) { return item.id !== id })
+  if (viewerActiveGroupId.value === id) viewerActiveGroupId.value = VIEWER_UNGROUPED_ID
   const selected = new Set(viewerSelectedGroupIds.value)
   selected.delete(id)
   viewerSelectedGroupIds.value = selected
+  for (const memberId of memberIds) {
+    const stillInGroup = viewerGroups.value.some(function (item) { return (item.operatorIds || []).indexOf(memberId) !== -1 })
+    const ungrouped = new Set(viewerUngroupedIds.value)
+    ungrouped.delete(memberId)
+    viewerUngroupedIds.value = ungrouped
+    removeViewOperator(memberId)
+    const saved = targets.value[memberId]
+    if (stillInGroup || !saved) continue
+    viewSavedIds.value = new Set(viewSavedIds.value).add(memberId)
+    try {
+      await deleteOperatorGrowthTarget({ accountId: props.accountId, operatorId: memberId, expectedRevision: Number(saved.revision) || 0 })
+      targets.value = Object.assign({}, targets.value)
+      delete targets.value[memberId]
+    } catch (err) {
+      if (err && err.code === 'growth_target_revision_conflict') await loadTargets()
+      targetError.value = targetErrorMessage(err, '养成目标删除失败')
+    } finally {
+      const next = new Set(viewSavedIds.value)
+      next.delete(memberId)
+      viewSavedIds.value = next
+    }
+  }
+  cacheTargets()
+  targetNotice.value = '分组及组内目标已删除'
+  if (targetNoticeTimer != null) clearTimeout(targetNoticeTimer)
+  targetNoticeTimer = setTimeout(function () { targetNotice.value = '' }, 1800)
+}
+
+function clearActiveGroupView() {
+  const active = viewerActiveGroup.value
+  if (!active) return
+  if (active.id === VIEWER_UNGROUPED_ID) {
+    const ids = Array.from(viewerUngroupedIds.value)
+    ids.forEach(function (id) { removeViewOperator(id) })
+    viewerUngroupedIds.value = new Set()
+    return
+  }
+  const ids = (active.operatorIds || []).slice()
+  ids.forEach(function (id) {
+    const next = new Set(viewerUngroupedIds.value)
+    next.delete(id)
+    viewerUngroupedIds.value = next
+    removeViewOperator(id)
+  })
+  const next = viewerGroups.value.map(function (item) {
+    if (item.id !== active.id) return item
+    return Object.assign({}, item, { operatorIds: [] })
+  })
+  viewerGroups.value = next.slice()
 }
 
 function toggleViewerGroupSelected(id) {
@@ -1058,6 +1152,7 @@ function toggleViewerGroupSelected(id) {
 }
 
 function viewerGroupHasMember(group, id) {
+  if (group && group.id === VIEWER_UNGROUPED_ID) return viewerUngroupedIds.value.has(id)
   return !!(group && (group.operatorIds || []).indexOf(id) !== -1)
 }
 
@@ -1068,8 +1163,9 @@ function memberName(id) {
 
 function groupTargetText(groupId, id) {
   const group = groupById.value[groupId]
-  const targets = mergeTargetsForIds(group ? [id] : [])
-  const target = targets[id]
+  const target = group
+    ? mergeTargetsForIds([id])[id]
+    : (viewerUngroupedIds.value.has(id) ? targets.value[id] : null)
   const entry = props.catalogEntries.find(function (item) { return item.id === id })
   if (!target || !entry) return ''
   const current = currentMap.value[id] || {}
@@ -1648,9 +1744,9 @@ onBeforeUnmount(function () {
 .tracker-view-search { display: flex; flex: 1 1 100%; gap: 6px }
 .tracker-view-search input[type="search"] { flex: 1 1 260px; min-width: 180px }
 .view-search-clear { flex: none; width: 32px; min-width: 32px; padding: 0 !important; border: 1px solid var(--line) !important; border-radius: 6px !important; background: var(--surface) !important; color: var(--ink-60) !important; font: 800 16px var(--font-b) !important; line-height: 1; cursor: pointer }
-.tracker-view-filters { display: flex; flex: 1 1 100%; flex-direction: column; gap: 7px }
-.tracker-view-filters .pf-row { gap: 6px }
-.tracker-view-filters .pf-label { min-width: 0; font-size: 10px }
+.tracker-view-filters { display: flex; flex: 1 1 100%; flex-direction: column; gap: 6px }
+.tracker-view-filters .pf-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0 }
+.tracker-view-filters .pf-label { min-width: 0; font-size: 10px; white-space: nowrap }
 .tracker-view-filters .mf-filter { padding: 3px; gap: 3px; border-radius: 8px }
 .tracker-view-filters .mf-filter button { display: inline-flex; min-height: 28px; align-items: center; gap: 4px; padding: 4px 9px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-60); font: 700 11px var(--font-b); cursor: pointer }
 .tracker-view-filters .mf-filter button:hover:not(.on) { color: var(--ink) }
@@ -1698,6 +1794,13 @@ onBeforeUnmount(function () {
 .group-stats-head { display: flex; align-items: center; justify-content: space-between; gap: 8px }
 .group-stats-head h4 { color: var(--ink); font: 900 13px var(--font-b) }
 .group-stats-head span { color: var(--ink-60); font: 800 10px var(--font-b) }
+.group-stats-union-check { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-60); font: 700 10px var(--font-b); cursor: pointer }
+.group-stats-union-check input { accent-color: var(--accent-strong) }
+.group-stats-name-input { min-width: 70px; flex: 1; padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--cream); color: var(--ink); font: 900 12px var(--font-b) }
+.group-stats-controls { display: inline-flex; gap: 3px; opacity: 0; transition: opacity .15s var(--ease) }
+.group-stats-card:hover .group-stats-controls, .group-stats-controls:focus-within { opacity: 1 }
+.group-stats-controls button { width: 20px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--cream); color: var(--ink-60); font-size: 11px; cursor: pointer }
+.group-stats-controls button:hover { color: var(--accent-strong); border-color: var(--accent) }
 .group-stats-rows { display: flex; flex-direction: column; gap: 5px }
 .group-stats-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 8px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; background: var(--cream) }
 .group-stats-row b { color: var(--ink); font-weight: 900 }
@@ -1802,8 +1905,6 @@ onBeforeUnmount(function () {
   .tracker-view-edit-row label select, .tracker-view-edit-row label input { flex: 1; width: auto; min-width: 0 }
   .tracker-view-row-actions { justify-content: stretch; width: 100% }
   .tracker-view-row-actions button { flex: 1 }
-  .tracker-view-filters .pf-row { align-items: flex-start; flex-direction: column }
-  .tracker-view-filters .pf-row .mf-filter { width: 100% }
   .tracker-view-results { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); max-height: 240px }
   .groups-manage-head { flex-direction: column; align-items: stretch }
   .group-create input { width: 100%; flex: 1 }
