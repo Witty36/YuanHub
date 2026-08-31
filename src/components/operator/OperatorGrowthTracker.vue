@@ -133,14 +133,42 @@
         <div class="tracker-mode-body">
           <div class="tracker-mode-summary">
             <strong>{{ growthRows.length }}</strong> 位密探 · 练度缺口汇总
-            <button type="button" class="tracker-edit-button" @click="openViewEditor('growth')"><Pencil :size="14" aria-hidden="true" /><span>编辑目标</span></button>
+            <div class="tracker-mode-actions">
+              <button type="button" class="tracker-edit-button" :class="{ on: growthAllocationPanel }" @click="growthAllocationPanel = !growthAllocationPanel"><span>库存分配方式</span></button>
+              <button type="button" class="tracker-edit-button" :class="{ on: viewEditor === 'growth' }" @click="toggleViewEditor('growth')"><Pencil :size="14" aria-hidden="true" /><span>编辑目标</span></button>
+            </div>
           </div>
           <p v-if="targetError" class="tracker-target-error" role="alert">{{ targetError }}</p>
           <p v-else-if="targetNotice" class="tracker-target-notice" role="status">{{ targetNotice }}</p>
+          <div v-if="growthAllocationPanel" class="growth-allocation-panel">
+            <div class="growth-allocation-head">
+              <div class="allocation-mode" role="group" aria-label="库存分配方式">
+                <button type="button" :aria-pressed="growthAllocationMode === 'priority'" :class="{ on: growthAllocationMode === 'priority' }" @click="setGrowthAllocationMode('priority')">按优先级</button>
+                <button type="button" :aria-pressed="growthAllocationMode === 'ratio'" :class="{ on: growthAllocationMode === 'ratio' }" @click="setGrowthAllocationMode('ratio')">按比例</button>
+              </div>
+              <button v-if="growthAllocationMode === 'priority'" type="button" class="allocation-reset" :disabled="!growthPriorityIds.length" @click="resetGrowthPriority">恢复自动顺序</button>
+            </div>
+            <p v-if="growthAllocationMode === 'priority'" class="allocation-hint">按优先级：按顺序逐个分配库存，靠前的密探优先毕业；默认绝密 &gt; 机密 &gt; 隐密、耗材多的优先，可拖拽调整顺序。</p>
+            <p v-else class="allocation-hint">按比例：把库存按每个密探需求的占比平均分摊，所有密探都会分到一部分，不涉及优先级排序。</p>
+            <div v-if="growthAllocationMode === 'priority'" class="growth-allocation-list">
+              <div v-for="(row, index) in growthAllocationOrderRows" :key="row.id" class="growth-allocation-row" :class="{ ready: row.allocationReady, dragging: growthDragIndex === index }" draggable="true" @dragstart="startGrowthDrag(index)" @dragend="endGrowthDrag" @dragover.prevent @drop.prevent="dropGrowthPriority(index)">
+                <span class="allocation-rank">{{ index + 1 }}</span>
+                <span class="allocation-drag" aria-hidden="true">⠿</span>
+                <span class="allocation-name">{{ row.name || row.id }}</span>
+                <span class="allocation-rarity"><span v-if="!row.owned" class="allocation-unowned">未拥有</span>{{ growthRarityLabel(row.rarity) }}</span>
+                <span class="allocation-status">{{ row.allocationReady ? '可升级' : '缺材料' }}</span>
+                <span class="allocation-actions">
+                  <button type="button" :aria-label="'上移 ' + (row.name || row.id)" :disabled="index === 0" @click="moveGrowthPriority(row.id, -1)">↑</button>
+                  <button type="button" :aria-label="'下移 ' + (row.name || row.id)" :disabled="index === growthAllocationOrderRows.length - 1" @click="moveGrowthPriority(row.id, 1)">↓</button>
+                </span>
+              </div>
+            </div>
+          </div>
           <div v-if="viewEditor === 'growth'" class="tracker-view-editor">
             <div class="tracker-view-search">
               <input v-model.trim="viewSearch" type="search" placeholder="搜索名称 / 拼音 / 首字母" aria-label="搜索密探" />
               <button type="button" class="view-search-clear" aria-label="清空搜索" title="清空搜索" @click="viewSearch = ''">×</button>
+              <label class="tracker-owned-only" :class="{ on: viewOwnedOnly }"><input v-model="viewOwnedOnly" type="checkbox" /><span class="tracker-owned-check"><i></i></span><span>仅显示已拥有密探</span></label>
             </div>
             <div class="tracker-view-filters">
               <div class="pf-row">
@@ -183,13 +211,12 @@
                   </div>
                   <div class="tracker-view-selected-name">
                     <h3>{{ op.name || op.id }}</h3>
-                    <p><span class="tracker-prof"><img v-if="profIcon(op.prof)" :src="profIcon(op.prof)" alt="" aria-hidden="true" />{{ op.prof || '未知属性' }}</span><span>{{ firstSubProf(op) || '未标注职业' }}</span></p>
+                    <p><span class="tracker-prof"><img v-if="profIcon(op.prof)" :src="profIcon(op.prof)" alt="" aria-hidden="true" />{{ op.prof || '未知属性' }}</span><span>{{ firstSubProf(op) || '未标注职业' }}</span><span v-if="!entryOwned(op)" class="selected-unowned">未拥有</span><span v-if="entryOwned(op)">当前 等级{{ currentFor(op).level }} · 修为{{ currentFor(op).elite }}</span></p>
                   </div>
                 </div>
                 <label>目标等级 <input v-model.number="viewDraft[op.id].level" type="number" min="1" max="100" @input="markViewChanged(op.id)" /></label>
                 <label>目标修为 <input v-model.number="viewDraft[op.id].elite" type="number" min="0" max="17" @input="markViewChanged(op.id)" /></label>
                 <div class="tracker-view-row-actions">
-                  <button type="button" class="row-save" :class="{ done: viewCompletedIds.has(op.id) }" :disabled="viewSaving || viewSavedIds.has(op.id) || viewCompletedIds.has(op.id)" @click="saveViewRow('growth', op.id)">{{ viewSavedIds.has(op.id) ? '保存中…' : '保存' }}</button>
                   <button type="button" class="row-delete" :disabled="viewSaving || viewSavedIds.has(op.id)" @click="deleteViewRow(op.id)">删除</button>
                 </div>
               </div>
@@ -197,6 +224,7 @@
             <p v-else class="editor-groups-hint">还没有选择密探，从上方筛选面板点击密探加入。</p>
             <div class="tracker-view-actions">
               <button type="button" class="tracker-view-save-all" :disabled="viewSaving" @click="saveViewTarget('growth')">{{ viewSaving ? '保存中…' : '编辑完成（' + selectedViewOperators.length + '）' }}</button>
+              <button type="button" class="cancel" :disabled="viewSaving" @click="closeViewEditor">取消编辑</button>
             </div>
           </div>
           <section class="aggregate-plan">
@@ -215,27 +243,59 @@
           <div v-if="!growthRows.length" class="tracker-state empty">还没有设置练度目标的密探，点“编辑目标”添加。</div>
           <div v-else class="growth-compact-list">
             <article v-for="row in growthRows" :key="row.id" class="growth-compact-row">
-              <div class="tracker-avatar" :class="'rarity-r' + (row.rarity || 3)">
-                <img v-if="row.avatar" :src="avatarUrl(row.avatar)" :alt="row.name" loading="lazy" />
-                <span v-else>{{ monogram(row) }}</span>
-              </div>
-              <div class="growth-compact-name">
-                <h3>{{ row.name || row.id }}</h3>
-                <p><span>{{ row.prof || '未知属性' }}</span><span>{{ firstSubProf(row) || '未标注职业' }}</span></p>
-              </div>
-              <div class="growth-compact-stats">
-                <span>Lv <b>{{ row.level }}</b> <em>/ {{ row.targetLevel }}</em></span>
-                <span>修为 <b>{{ row.elite }}</b> <em>/ {{ row.targetElite }}</em></span>
-                <span>化极 <b>{{ starLabel(row.starLevel) }}</b></span>
-              </div>
-              <div class="growth-compact-gap">
-                <span v-if="!row.calculation.gaps.length" class="growth-clear">当前目标材料已备齐</span>
-                <template v-else>
-                  <span v-for="gap in row.calculation.gaps" :key="gap.id" class="material-chip">
-                    <b>{{ itemName(gap.id) }}</b><em>缺 {{ formatNumber(gap.gap) }}</em>
-                  </span>
-                </template>
-                <small>ETA {{ row.calculation.etaDays == null ? '暂无' : formatEta(row.calculation.etaDays) }}</small>
+              <header class="growth-compact-head">
+                <div class="tracker-avatar" :class="'rarity-r' + (row.rarity || 3)">
+                  <img v-if="row.avatar" :src="avatarUrl(row.avatar)" :alt="row.name" loading="lazy" />
+                  <span v-else>{{ monogram(row) }}</span>
+                </div>
+                <div class="growth-compact-title">
+                  <h3>{{ row.name || row.id }}</h3>
+                  <p class="growth-compact-meta"><img v-if="profIcon(row.prof)" :src="profIcon(row.prof)" alt="" aria-hidden="true" />{{ row.prof || '未知属性' }} · {{ firstSubProf(row) || '未标注职业' }}</p>
+                </div>
+              </header>
+              <div class="growth-compare">
+                <div class="growth-compare-row head pair-row"><span></span><b>当前</b><b></b><b>目标</b></div>
+                <div class="growth-compare-row pair-row"><span>等级</span><b>{{ row.level }}</b><i>/</i><b>{{ row.targetLevel }}</b></div>
+                <div class="growth-compare-bar" :class="{ done: Number(row.level) >= Number(row.targetLevel) }"><i :style="{ width: progress(row.level, row.targetLevel) + '%' }"></i></div>
+                <div class="growth-compare-row pair-row"><span>修为</span><b>{{ row.elite }}</b><i>/</i><b>{{ row.targetElite }}</b></div>
+                <div class="growth-compare-bar" :class="{ done: Number(row.elite) >= Number(row.targetElite) }"><i :style="{ width: progress(row.elite, row.targetElite) + '%' }"></i></div>
+                <div class="growth-compare-gap">
+                  <span>缺口</span>
+                  <b>{{ growthTargetReached(row) ? '无' : gapSummary(row) }}</b>
+                </div>
+                <div class="growth-upgrade-bar" :class="{ 'is-complete': growthTargetReached(row) }">
+                  <em v-if="!row.owned" class="growth-gap-ready is-unowned">未拥有</em>
+                  <template v-else-if="growthUpgradeFields(row).length">
+                    <button v-if="growthHasUpgrade(row, 'level')" type="button" class="growth-upgrade-button" :class="{ ready: growthUpgradeReady(row, 'level') }" :disabled="growthUpgradeExecuting" @click="openGrowthUpgrade(row, 'level')">升 {{ growthUpgradeStepDelta(row, 'level') }} 级</button>
+                    <button v-if="growthHasUpgrade(row, 'elite')" type="button" class="growth-upgrade-button" :class="{ ready: growthUpgradeReady(row, 'elite') }" :disabled="growthUpgradeExecuting" @click="openGrowthUpgrade(row, 'elite')">升至 {{ growthStepTarget(row, 'elite') }} 修为</button>
+                  </template>
+                  <em v-else-if="growthTargetReached(row)" class="growth-gap-ready">已备齐</em>
+                </div>
+                <div v-if="growthUpgradeKey === row.id" class="growth-upgrade-pop" role="dialog" aria-label="升级确认">
+                  <div class="growth-upgrade-pop-head">
+                    <strong>{{ growthUpgradeReady(row, growthUpgradeField) ? '升级' : '缺口检查' }} {{ row.name || row.id }} · {{ growthFieldLabel(growthUpgradeField) }}</strong>
+                    <button type="button" aria-label="关闭" :disabled="growthUpgradeExecuting" @click="closeGrowthUpgrade">×</button>
+                  </div>
+                  <div class="growth-upgrade-pop-row">
+                    <div class="growth-upgrade-pop-title"><b>{{ growthFieldLabel(growthUpgradeField) }}</b><span>{{ row[growthUpgradeField] }} → {{ growthStepTarget(row, growthUpgradeField) }}</span></div>
+                    <div v-if="growthUpgradePreview(row, growthUpgradeField)" class="growth-upgrade-pop-body">
+                      <div v-if="growthUpgradeRequirements(row, growthUpgradeField).length" class="growth-upgrade-pop-mats">
+                        <span v-for="req in growthUpgradeRequirements(row, growthUpgradeField)" :key="(req.entity_type || req.entityType || 'item') + ':' + req.id" :class="{ 'is-lack': growthUpgradeReqValue(req, 'balance_after') < 0 }">
+                          {{ itemName(req.id) }} × {{ formatNumber(growthUpgradeReqValue(req, 'required')) }}<small>{{ growthUpgradeReqLabel(req) }}</small>
+                        </span>
+                      </div>
+                      <em v-else>无需扣除道具</em>
+                      <em v-for="reason in growthUpgradeBlocking(row, growthUpgradeField)" :key="reason.code || reason.message" class="growth-upgrade-blocked">{{ reason.message || reason.code }}</em>
+                    </div>
+                    <div v-else-if="growthUpgradeError(row, growthUpgradeField)" class="growth-upgrade-pop-error">{{ growthUpgradeError(row, growthUpgradeField) }}</div>
+                    <div v-else class="growth-upgrade-pop-state">正在核对库存…</div>
+                  </div>
+                  <em v-if="!growthUpgradeReady(row, growthUpgradeField)" class="growth-upgrade-pop-note">材料尚未备齐，当前仅可查看</em>
+                  <div class="growth-upgrade-pop-actions">
+                    <button type="button" class="growth-upgrade-pop-confirm" :disabled="!growthUpgradeCanConfirm(row)" @click="executeGrowthUpgrade(row)">{{ growthUpgradeExecuting ? '正在升级…' : '确认升级并扣除材料' }}</button>
+                    <button type="button" class="growth-upgrade-pop-cancel" :disabled="growthUpgradeExecuting" @click="closeGrowthUpgrade">取消</button>
+                  </div>
+                </div>
               </div>
             </article>
           </div>
@@ -245,7 +305,9 @@
         <div class="tracker-mode-body">
           <div class="tracker-mode-summary">
             <strong>{{ heartRows.length }}</strong> 位密探 · 心纸缺口汇总
-            <button type="button" class="tracker-edit-button" @click="openViewEditor('heart')"><Pencil :size="14" aria-hidden="true" /><span>编辑目标</span></button>
+            <div class="tracker-mode-actions">
+              <button type="button" class="tracker-edit-button" :class="{ on: viewEditor === 'heart' }" @click="toggleViewEditor('heart')"><Pencil :size="14" aria-hidden="true" /><span>编辑目标</span></button>
+            </div>
           </div>
           <p v-if="targetError" class="tracker-target-error" role="alert">{{ targetError }}</p>
           <p v-else-if="targetNotice" class="tracker-target-notice" role="status">{{ targetNotice }}</p>
@@ -253,6 +315,7 @@
             <div class="tracker-view-search">
               <input v-model.trim="viewSearch" type="search" placeholder="搜索名称 / 拼音 / 首字母" aria-label="搜索密探" />
               <button type="button" class="view-search-clear" aria-label="清空搜索" title="清空搜索" @click="viewSearch = ''">×</button>
+              <label class="tracker-owned-only" :class="{ on: viewOwnedOnly }"><input v-model="viewOwnedOnly" type="checkbox" /><span class="tracker-owned-check"><i></i></span><span>仅显示已拥有密探</span></label>
             </div>
             <div class="tracker-view-filters">
               <div class="pf-row">
@@ -295,22 +358,22 @@
                   </div>
                   <div class="tracker-view-selected-name">
                     <h3>{{ op.name || op.id }}</h3>
-                    <p><span class="tracker-prof"><img v-if="profIcon(op.prof)" :src="profIcon(op.prof)" alt="" aria-hidden="true" />{{ op.prof || '未知属性' }}</span><span>{{ firstSubProf(op) || '未标注职业' }}</span></p>
+                    <p><span class="tracker-prof"><img v-if="profIcon(op.prof)" :src="profIcon(op.prof)" alt="" aria-hidden="true" />{{ op.prof || '未知属性' }}</span><span>{{ firstSubProf(op) || '未标注职业' }}</span><span v-if="!entryOwned(op)" class="selected-unowned">未拥有</span></p>
                   </div>
                 </div>
-                <label>目标化极
+                <label><span class="tracker-current-star">当前化极 <b>{{ starLabel(currentFor(op).starLevel) }}</b></span> → 目标化极
                   <select v-model.number="viewDraft[op.id].starLevel" @change="markViewChanged(op.id)">
                     <option v-for="stage in starStages" :key="stage.value" :value="stage.value">{{ stage.label }}</option>
                   </select>
                 </label>
                 <div class="tracker-view-row-actions">
-                  <button type="button" class="row-save" :class="{ done: viewCompletedIds.has(op.id) }" :disabled="viewSaving || viewSavedIds.has(op.id) || viewCompletedIds.has(op.id)" @click="saveViewRow('heart', op.id)">{{ viewSavedIds.has(op.id) ? '保存中…' : '保存' }}</button>
                   <button type="button" class="row-delete" :disabled="viewSaving || viewSavedIds.has(op.id)" @click="deleteViewRow(op.id)">删除</button>
                 </div>
               </div>
             </div>
             <div class="tracker-view-actions">
               <button type="button" class="tracker-view-save-all" :disabled="viewSaving" @click="saveViewTarget('heart')">{{ viewSaving ? '保存中…' : '编辑完成（' + selectedViewOperators.length + '）' }}</button>
+              <button type="button" class="cancel" :disabled="viewSaving" @click="closeViewEditor">取消编辑</button>
             </div>
           </div>
           <section class="aggregate-plan">
@@ -351,6 +414,16 @@
         </div>
       </template>
     </template>
+    <div v-if="viewConfirmOpen" class="tracker-view-confirm" role="dialog" aria-modal="true" aria-label="保存确认">
+      <div class="tracker-view-confirm-box">
+        <h3>是否保存本次修改？</h3>
+        <p>可以选择保存修改，或放弃并取消本次编辑。</p>
+        <div class="tracker-view-confirm-actions">
+          <button type="button" :disabled="viewSaving" @click="saveViewTarget(viewConfirmMode)">{{ viewSaving ? '保存中…' : '保存' }}</button>
+          <button type="button" :disabled="viewSaving" @click="closeViewEditor">取消</button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -359,7 +432,7 @@ import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { Info, Pencil, RefreshCw, Star } from '@lucide/vue'
 import { avatarUrl } from '../../api/request.js'
 import { getAcquired, getCurrent } from '../../api/inventory.js'
-import { deleteOperatorGrowthTarget, getOperatorGrowthTargets, putOperatorGrowthTarget } from '../../api/operator.js'
+import { deleteOperatorGrowthTarget, executeOperatorUpgrade, getOperatorGrowthTargets, previewOperatorUpgrade, putOperatorGrowthTarget } from '../../api/operator.js'
 import { ITEM_CATALOG } from '../../data/inventory/catalog.js'
 import {
   calculateLevelRequirements,
@@ -374,6 +447,7 @@ import { matchesProfSubFilter, subProfList, subProfOptions } from '../../utils/o
 
 const props = defineProps({
   accountId: { type: String, default: '' },
+  game: { type: String, default: '' },
   currentEntries: { type: Array, default: () => [] },
   catalogEntries: { type: Array, default: () => [] },
   favoriteIds: { type: Object, default: () => new Set() },
@@ -383,6 +457,7 @@ const props = defineProps({
   initialCurrentAgents: { type: Object, default: () => ({}) },
   currentInventoryReady: { type: Boolean, default: false }
 })
+const emit = defineEmits(['upgrade-applied'])
 
 const loading = ref(false)
 const trackerMode = ref('favorite')
@@ -392,9 +467,13 @@ const viewDraft = ref({})
 const viewSelectedOrder = ref([])
 const viewSavedIds = ref(new Set())
 const viewCompletedIds = ref(new Set())
+const viewDirty = ref(false)
+const viewConfirmOpen = ref(false)
+const viewConfirmMode = ref('')
 const viewSearch = ref('')
 const viewProfFilter = ref('all')
 const viewSubProfFilter = ref('all')
+const viewOwnedOnly = ref(false)
 const viewerGroups = ref([])
 const VIEWER_UNGROUPED_ID = '__ungrouped__'
 const viewerUngroupedIds = ref(new Set())
@@ -405,6 +484,10 @@ const viewerSelectedGroupIds = ref(new Set())
 const viewerGroupPickerQuery = ref('')
 const viewerGroupProfFilter = ref('all')
 const viewerGroupSubProfFilter = ref('all')
+const growthAllocationMode = ref('priority')
+const growthPriorityIds = ref([])
+const growthAllocationPanel = ref(false)
+const growthDragIndex = ref(-1)
 const error = ref('')
 const currentItems = ref({})
 const currentAgents = ref({})
@@ -418,6 +501,14 @@ const targetLoading = ref(false)
 const targetError = ref('')
 const targetNotice = ref('')
 const targetBusyIds = ref(new Set())
+const growthUpgradeKey = ref('')
+const growthUpgradeField = ref('')
+const growthUpgradePreviews = ref({})
+const growthUpgradeErrors = ref({})
+const growthUpgradeBusyKeys = ref(new Set())
+const growthUpgradeExecuting = ref(false)
+const growthUpgradeRequestSeqs = new Map()
+const growthUpgradeExecutionKeys = new Map()
 let targetLoadSeq = 0
 let targetNoticeTimer = null
 let inventoryLoadSeq = 0
@@ -441,6 +532,7 @@ const viewSearchOptions = computed(function () {
   const query = viewSearch.value.trim().toLowerCase()
   return props.catalogEntries.filter(function (entry) {
     if (!matchesProfSubFilter(entry, viewProfFilter.value, viewSubProfFilter.value)) return false
+    if (viewOwnedOnly.value && !currentMap.value[entry.id]) return false
     if (query) {
       const hay = [entry.name, entry.alias, entry.id, entry.prof].filter(Boolean).concat(subProfList(entry)).join(' ').toLowerCase()
       if (hay.indexOf(query) === -1) return false
@@ -464,7 +556,7 @@ const selectedViewOperators = computed(function () {
   return out
 })
 const hasViewFilters = computed(function () {
-  return Boolean(viewSearch.value) || viewProfFilter.value !== 'all' || viewSubProfFilter.value !== 'all'
+  return Boolean(viewSearch.value) || viewProfFilter.value !== 'all' || viewSubProfFilter.value !== 'all' || viewOwnedOnly.value
 })
 const starStages = [
   { value: 0, label: '未拥有' }
@@ -545,20 +637,26 @@ const heartMergedTargets = computed(function () {
 const growthRows = computed(function () {
   const ids = props.favoriteIds instanceof Set ? props.favoriteIds : new Set()
   const savedTargets = growthMergedTargets.value
-  return props.catalogEntries.filter(function (entry) {
+  const rows = props.catalogEntries.filter(function (entry) {
     const target = savedTargets[entry.id]
     return !!target || viewDraft.value[entry.id]
-  }).map(function (entry) { return buildGrowthRow(entry, savedTargets[entry.id]) }).sort(function (a, b) {
+  }).map(function (entry) { return buildGrowthRow(entry, savedTargets[entry.id]) })
+  return allocateGrowthRows(rows).sort(function (a, b) {
     return (Number(ids.has(b.id)) - Number(ids.has(a.id))) || (Number(b.level) - Number(a.level)) || (Number(b.elite) - Number(a.elite)) || String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
   })
 })
 
+const growthAllocationOrderRows = computed(function () {
+  return growthAllocationOrder(growthRows.value)
+})
+
 const growthAggregateRows = computed(function () {
   const active = viewEditor.value === 'growth'
-  return props.catalogEntries.filter(function (entry) {
+  const rows = props.catalogEntries.filter(function (entry) {
     if (active) return !!viewDraft.value[entry.id]
     return !!growthMergedTargets.value[entry.id]
-  }).map(function (entry) { return buildGrowthRow(entry, growthMergedTargets.value[entry.id]) }).sort(function (a, b) {
+  }).map(function (entry) { return buildGrowthRow(entry, growthMergedTargets.value[entry.id]) })
+  return allocateGrowthRows(rows).sort(function (a, b) {
     return (Number(b.level) - Number(a.level)) || (Number(b.elite) - Number(a.elite)) || String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
   })
 })
@@ -606,6 +704,109 @@ function buildGrowthRow(entry, targetOverride) {
   })
 }
 
+function allocateGrowthRows(rows) {
+  if (!rows || !rows.length) return rows
+  const allocatedMaps = rows.map(function () { return {} })
+  const allocatedExperience = rows.map(function () { return 0 })
+  const stock = currentItems.value
+
+  if (growthAllocationMode.value === 'ratio') {
+    const itemRequirements = rows.map(function (row) {
+      const calculation = (row && row.calculation) || {}
+      return (calculation.total && calculation.total.items) || {}
+    })
+    const requiredById = {}
+    itemRequirements.forEach(function (items) {
+      Object.keys(items).forEach(function (id) {
+        requiredById[id] = (requiredById[id] || 0) + (Number(items[id]) || 0)
+      })
+    })
+    const experienceRequirements = rows.map(function (row) {
+      const calculation = (row && row.calculation) || {}
+      return Number(calculation.level && calculation.level.experience) || 0
+    })
+
+    function allocate(requirements, available, totalRequired) {
+      const result = requirements.map(function () { return 0 })
+      if (totalRequired <= 0 || available <= 0) return result
+      if (available >= totalRequired) {
+        requirements.forEach(function (req, index) { result[index] = req })
+        return result
+      }
+      requirements.forEach(function (req, index) {
+        result[index] = Math.floor(req * available / totalRequired)
+      })
+      let remaining = available - result.reduce(function (sum, value) { return sum + value }, 0)
+      if (remaining > 0) {
+        const order = requirements.map(function (req, index) {
+          return { index: index, remainder: req * available / totalRequired - result[index], req: req }
+        }).sort(function (a, b) {
+          return (b.remainder - a.remainder) || (b.req - a.req)
+        })
+        order.forEach(function (item) {
+          if (remaining <= 0) return
+          result[item.index] += 1
+          remaining -= 1
+        })
+      }
+      return result
+    }
+
+    Object.keys(requiredById).forEach(function (id) {
+      const requirements = itemRequirements.map(function (items) { return Number(items[id]) || 0 })
+      const allocated = allocate(requirements, Number(stock[id]) || 0, requiredById[id])
+      allocated.forEach(function (owned, index) {
+        if (owned > 0) allocatedMaps[index][id] = owned
+      })
+    })
+    const totalExperience = experienceRequirements.reduce(function (sum, value) { return sum + value }, 0)
+    const experienceAllocated = allocate(experienceRequirements, bookExperience(stock), totalExperience)
+    experienceAllocated.forEach(function (owned, index) { allocatedExperience[index] = owned })
+  } else {
+    const ordered = growthAllocationOrder(rows)
+    const remainingItems = Object.assign({}, stock)
+    let remainingExperience = bookExperience(stock)
+    ordered.forEach(function (row) {
+      const index = rows.indexOf(row)
+      const items = (row.calculation && row.calculation.total && row.calculation.total.items) || {}
+      Object.keys(items).forEach(function (id) {
+        const required = Number(items[id]) || 0
+        const available = Number(remainingItems[id]) || 0
+        const owned = Math.min(required, available)
+        if (owned > 0) allocatedMaps[index][id] = owned
+        remainingItems[id] = available - owned
+      })
+      const experienceRequired = Number(row.calculation && row.calculation.level && row.calculation.level.experience) || 0
+      const ownedExperience = Math.min(experienceRequired, remainingExperience)
+      allocatedExperience[index] = ownedExperience
+      remainingExperience -= ownedExperience
+    })
+  }
+
+  return rows.map(function (row, index) {
+    const calculation = row.calculation || {}
+    const allocatedItems = allocatedMaps[index] || {}
+    const gaps = []
+    Object.keys((calculation.total && calculation.total.items) || {}).forEach(function (id) {
+      const required = Number(calculation.total.items[id]) || 0
+      const owned = Number(allocatedItems[id]) || 0
+      const gap = Math.max(required - owned, 0)
+      if (gap > 0) gaps.push({ id: id, required: required, owned: owned, gap: gap })
+    })
+    const experienceRequired = Number(calculation.level && calculation.level.experience) || 0
+    const experienceGap = Math.max(experienceRequired - allocatedExperience[index], 0)
+    if (experienceGap > 0) {
+      gaps.push({ id: '__experience__', required: experienceRequired, owned: allocatedExperience[index], gap: experienceGap })
+    }
+    return Object.assign({}, row, {
+      allocatedItems: allocatedItems,
+      allocatedExperience: allocatedExperience[index],
+      allocationReady: !gaps.length,
+      calculation: Object.assign({}, calculation, { gaps: gaps, experienceGap: experienceGap })
+    })
+  })
+}
+
 function buildHeartRow(entry, targetOverride) {
   const current = currentMap.value[entry.id] || {}
   const target = targetFor(Object.assign({}, entry, current), targetOverride)
@@ -634,16 +835,25 @@ function buildHeartRow(entry, targetOverride) {
 
 const growthAggregate = computed(function () {
   const requirements = []
-  let experience = 0
+  const gapsById = {}
+  let experienceGap = 0
   growthAggregateRows.value.forEach(function (row) {
     requirements.push(row.calculation.level, row.calculation.xiuwei)
-    experience += Number(row.calculation.level.experience) || 0
+    experienceGap += Number(row.calculation.experienceGap) || 0
+    ;(row.calculation.gaps || []).forEach(function (gap) {
+      const key = gap.id
+      const existing = gapsById[key]
+      if (existing) {
+        existing.required += Number(gap.required) || 0
+        existing.owned += Number(gap.owned) || 0
+        existing.gap += Number(gap.gap) || 0
+      } else {
+        gapsById[key] = { id: key, required: Number(gap.required) || 0, owned: Number(gap.owned) || 0, gap: Number(gap.gap) || 0 }
+      }
+    })
   })
   const total = mergeRequirements.apply(null, requirements)
-  const net = netRequirement(total, currentItems.value)
-  const gaps = net.gaps.slice()
-  const experienceGap = Math.max(experience - bookExperience(currentItems.value), 0)
-  if (experienceGap) gaps.push({ id: '__experience__', required: experience, owned: bookExperience(currentItems.value), gap: experienceGap })
+  const gaps = Object.keys(gapsById).map(function (key) { return gapsById[key] })
   return { total, gaps, experienceGap, etaDays: etaForGaps(gaps), gapCount: gaps.length }
 })
 
@@ -885,6 +1095,86 @@ function targetMigrationKey() { return 'yuanhub:operator-targets-migrated:v1:' +
 
 function viewerGroupsStorageKey() { return 'yuanhub:growth-groups:' + props.accountId }
 
+function allocationPriorityStorageKey() { return 'yuanhub:growth-allocation-priority:' + props.accountId }
+
+function readGrowthAllocationPriority() {
+  if (typeof localStorage === 'undefined' || !props.accountId) return []
+  try {
+    const parsed = JSON.parse(localStorage.getItem(allocationPriorityStorageKey()) || '[]')
+    return Array.isArray(parsed) ? parsed.filter(function (id) { return typeof id === 'string' }) : []
+  } catch (_) {
+    return []
+  }
+}
+
+function cacheGrowthAllocationPriority() {
+  if (typeof localStorage === 'undefined' || !props.accountId) return
+  try { localStorage.setItem(allocationPriorityStorageKey(), JSON.stringify(growthPriorityIds.value)) } catch (_) {}
+}
+
+function growthMaterialAmount(row) {
+  const calculation = (row && row.calculation) || {}
+  const total = calculation.total || {}
+  const items = total.items || {}
+  return Object.keys(items).reduce(function (sum, id) { return sum + (Number(items[id]) || 0) }, 0) +
+    (Number(total.money) || 0) / 100000 +
+    (Number(calculation.level && calculation.level.experience) || 0) / 100
+}
+
+function growthRarityLabel(rarity) {
+  const map = { 5: '绝密', 4: '机密', 3: '隐密' }
+  return map[Number(rarity)] || ('品质 ' + rarity)
+}
+
+function growthAllocationOrder(rows) {
+  const byId = {}
+  rows.forEach(function (row) { byId[row.id] = row })
+  const manual = growthPriorityIds.value.filter(function (id) { return byId[id] })
+  const rest = rows.filter(function (row) { return manual.indexOf(row.id) === -1 }).slice().sort(function (a, b) {
+    return (Number(b.rarity) - Number(a.rarity)) || (growthMaterialAmount(b) - growthMaterialAmount(a)) || String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
+  })
+  return manual.map(function (id) { return byId[id] }).concat(rest)
+}
+
+function setGrowthAllocationMode(mode) {
+  growthAllocationMode.value = mode === 'ratio' ? 'ratio' : 'priority'
+}
+
+function resetGrowthPriority() {
+  growthPriorityIds.value = []
+  cacheGrowthAllocationPriority()
+}
+
+function reorderGrowthPriority(from, to) {
+  const current = growthAllocationOrderRows.value.map(function (row) { return row.id })
+  if (from < 0 || from >= current.length || to < 0 || to >= current.length || from === to) return
+  const next = current.slice()
+  next.splice(to, 0, next.splice(from, 1)[0])
+  growthPriorityIds.value = next
+  cacheGrowthAllocationPriority()
+}
+
+function moveGrowthPriority(id, direction) {
+  const current = growthAllocationOrderRows.value.map(function (row) { return row.id })
+  const from = current.indexOf(id)
+  reorderGrowthPriority(from, from + direction)
+}
+
+function startGrowthDrag(index) {
+  growthDragIndex.value = index
+}
+
+function endGrowthDrag() {
+  growthDragIndex.value = -1
+}
+
+function dropGrowthPriority(index) {
+  const from = growthDragIndex.value
+  growthDragIndex.value = -1
+  if (from < 0 || from === index) return
+  reorderGrowthPriority(from, index)
+}
+
 function loadViewerGroups() {
   if (typeof localStorage === 'undefined' || !props.accountId) return
   try {
@@ -912,6 +1202,7 @@ watch([viewerGroups, viewerUngroupedIds], persistViewerGroups, { deep: true })
 watch(function () { return props.accountId }, function () {
   viewerGroups.value = []
   viewerUngroupedIds.value = new Set()
+  growthPriorityIds.value = readGrowthAllocationPriority()
   loadViewerGroups()
 })
 
@@ -1247,9 +1538,13 @@ async function setTarget(row, field, event) {
 
 function openViewEditor(mode, operatorId) {
   viewEditor.value = mode
+  viewDirty.value = false
+  viewConfirmOpen.value = false
+  viewConfirmMode.value = ''
   viewSearch.value = ''
   viewProfFilter.value = 'all'
   viewSubProfFilter.value = 'all'
+  viewOwnedOnly.value = false
   targetError.value = ''
   targetNotice.value = ''
   viewDraft.value = {}
@@ -1261,6 +1556,19 @@ function openViewEditor(mode, operatorId) {
     const entry = props.catalogEntries.find(function (item) { return item.id === operatorId })
     if (entry) selectViewOperator(entry)
   }
+}
+
+function toggleViewEditor(mode) {
+  if (viewEditor.value === mode) {
+    if (!viewDirty.value) {
+      closeViewEditor()
+      return
+    }
+    viewConfirmMode.value = mode
+    viewConfirmOpen.value = true
+    return
+  }
+  openViewEditor(mode)
 }
 
 function preloadViewSaved(mode) {
@@ -1293,12 +1601,276 @@ function viewDraftFor(entry) {
   return viewDraft.value[id]
 }
 
+const opGapOpenIds = ref(new Set())
+
+function currentFor(op) {
+  const current = currentMap.value[op.id] || {}
+  return { level: Number(current.level) || 0, elite: Number(current.elite) || 0, starLevel: Number(current.starLevel) || 0 }
+}
+
+function entryOwned(entry) {
+  const current = currentMap.value[entry && entry.id] || {}
+  return Boolean(Number(current.level) || Number(current.elite) || Number(current.starLevel))
+}
+
+function toggleOpGap(id) {
+  const next = new Set(opGapOpenIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  opGapOpenIds.value = next
+}
+
+function growthUpgradeFields(row) {
+  if (!row || !row.id) return []
+  const fields = []
+  const level = Number(row.level) || 0
+  const elite = Number(row.elite) || 0
+  if (level < (Number(row.targetLevel) || 0)) fields.push('level')
+  if (elite < (Number(row.targetElite) || 0) && elite < maxEliteForLevel(level)) fields.push('elite')
+  return fields
+}
+
+function growthHasUpgrade(row, field) {
+  return growthUpgradeFields(row).indexOf(field) !== -1
+}
+
+function growthStepTarget(row, field) {
+  const level = Number(row.level) || 0
+  const elite = Number(row.elite) || 0
+  if (field === 'level') return Math.min(Number(row.targetLevel) || 0, level + 5)
+  const cap = Math.min(Number(row.targetElite) || 0, maxEliteForLevel(level))
+  return Math.min(cap, elite + 1)
+}
+
+function growthUpgradeStepDelta(row, field) {
+  return Math.max(0, growthStepTarget(row, field) - (field === 'level' ? Number(row.level) || 0 : Number(row.elite) || 0))
+}
+
+function growthFieldLabel(field) {
+  return field === 'level' ? '等级' : '修为'
+}
+
+function trackerGame(row) {
+  if (props.game) return props.game
+  const games = row && row.games
+  if (Array.isArray(games) && games.length) return games[games.length - 1]
+  return props.game
+}
+
+function growthUpgradeReady(row, field) {
+  if (!row || !row.id || !props.isLoggedIn || !props.accountId || !trackerGame(row)) return false
+  if (!growthHasUpgrade(row, field)) return false
+  const target = growthStepTarget(row, field)
+  const itemsStock = row.allocatedItems || currentItems.value
+  const experienceStock = row.allocatedExperience != null ? Number(row.allocatedExperience) : bookExperience(currentItems.value)
+  if (field === 'level') {
+    const req = calculateLevelRequirements(Number(row.level) || 0, target, firstSubProf(row), false)
+    const itemsReady = Object.keys(req.items || {}).every(function (id) { return (Number(itemsStock[id]) || 0) >= req.items[id] })
+    return itemsReady && Number(req.experience) <= experienceStock
+  }
+  const req = calculateXiuweiRequirements(Number(row.elite) || 0, target, xiuweiJob(row.prof))
+  return Object.keys(req.items || {}).every(function (id) { return (Number(itemsStock[id]) || 0) >= req.items[id] })
+}
+
+function growthUpgradeKeyFor(row, field) {
+  return row.id + ':' + field
+}
+
+function growthUpgradePreview(row, field) {
+  return growthUpgradePreviews.value[growthUpgradeKeyFor(row, field)] || null
+}
+
+function growthUpgradeError(row, field) {
+  return growthUpgradeErrors.value[growthUpgradeKeyFor(row, field)] || ''
+}
+
+function growthUpgradeBusy(row, field) {
+  return growthUpgradeBusyKeys.value.has(growthUpgradeKeyFor(row, field))
+}
+
+function growthUpgradeRequirements(row, field) {
+  const preview = growthUpgradePreview(row, field)
+  return preview && Array.isArray(preview.requirements) ? preview.requirements : []
+}
+
+function growthUpgradeReqValue(req, key) {
+  if (!req) return 0
+  const camel = key.replace(/_([a-z])/g, function (_, letter) { return letter.toUpperCase() })
+  return Number(req[key] != null ? req[key] : req[camel]) || 0
+}
+
+function growthUpgradeReqLabel(req) {
+  const balance = growthUpgradeReqValue(req, 'balance_after')
+  if (balance < 0) return '缺 ' + formatNumber(Math.abs(balance))
+  return formatNumber(growthUpgradeReqValue(req, 'owned')) + ' → ' + formatNumber(balance)
+}
+
+function growthUpgradeBlocking(row, field) {
+  const preview = growthUpgradePreview(row, field)
+  const reasons = (preview && (preview.blocking_reasons || preview.blockingReasons)) || []
+  return reasons.filter(function (reason) { return reason && reason.code !== 'insufficient_inventory' })
+}
+
+function growthUpgradeAvailable(row, field) {
+  const preview = growthUpgradePreview(row, field)
+  return Boolean(preview && preview.available)
+}
+
+function growthUpgradeCanConfirm(row) {
+  const field = growthUpgradeField.value
+  if (!row || !field || growthUpgradeExecuting.value) return false
+  return !growthUpgradeBusy(row, field) && !growthUpgradeError(row, field) && growthUpgradeAvailable(row, field)
+}
+
+function openGrowthUpgrade(row, field) {
+  if (!row || !row.id || !growthHasUpgrade(row, field) || growthUpgradeExecuting.value || !props.accountId || !trackerGame(row)) return
+  growthUpgradeKey.value = row.id
+  growthUpgradeField.value = field
+  growthUpgradePreviews.value = {}
+  growthUpgradeErrors.value = {}
+  loadGrowthUpgradePreview(row, field)
+}
+
+async function loadGrowthUpgradePreview(row, field) {
+  if (!row || !row.id || !props.accountId || !trackerGame(row)) return
+  const key = growthUpgradeKeyFor(row, field)
+  const seq = (growthUpgradeRequestSeqs.get(key) || 0) + 1
+  growthUpgradeRequestSeqs.set(key, seq)
+  growthUpgradeBusyKeys.value = new Set(growthUpgradeBusyKeys.value).add(key)
+  growthUpgradePreviews.value = Object.assign({}, growthUpgradePreviews.value, { [key]: null })
+  growthUpgradeErrors.value = Object.assign({}, growthUpgradeErrors.value, { [key]: '' })
+  const entry = currentMap.value[row.id] || row
+  try {
+    const data = await previewOperatorUpgrade({
+      accountId: props.accountId,
+      game: trackerGame(row),
+      operatorId: row.id,
+      dimension: field,
+      target: growthStepTarget(row, field),
+      expectedOperatorRevision: Number(entry.revision) || 0
+    })
+    if (growthUpgradeRequestSeqs.get(key) !== seq || growthUpgradeKey.value !== row.id) return
+    growthUpgradePreviews.value = Object.assign({}, growthUpgradePreviews.value, { [key]: data })
+  } catch (err) {
+    if (growthUpgradeRequestSeqs.get(key) !== seq || growthUpgradeKey.value !== row.id) return
+    growthUpgradeErrors.value = Object.assign({}, growthUpgradeErrors.value, { [key]: targetErrorMessage(err, '提升预览失败') })
+  } finally {
+    if (growthUpgradeRequestSeqs.get(key) === seq) {
+      const next = new Set(growthUpgradeBusyKeys.value)
+      next.delete(key)
+      growthUpgradeBusyKeys.value = next
+    }
+  }
+}
+
+function closeGrowthUpgrade() {
+  if (growthUpgradeExecuting.value) return
+  growthUpgradeKey.value = ''
+  growthUpgradeField.value = ''
+  growthUpgradePreviews.value = {}
+  growthUpgradeErrors.value = {}
+}
+
+function uuid() {
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') return globalThis.crypto.randomUUID()
+  return 'upgrade-' + Date.now() + '-' + Math.random().toString(36).slice(2)
+}
+
+function applyUpgradeConsumption(consumed) {
+  ;(Array.isArray(consumed) ? consumed : []).forEach(function (item) {
+    const type = item.entity_type || item.entityType
+    const id = item.id
+    const balance = Number(item.balance_after != null ? item.balance_after : item.balanceAfter) || 0
+    if (type === 'agent') currentAgents.value = Object.assign({}, currentAgents.value, { [id]: balance })
+    else currentItems.value = Object.assign({}, currentItems.value, { [id]: balance })
+  })
+  const stock = currentItems.value
+  currentItems.value = Object.assign({}, stock, {
+    __experience__: (Number(stock.bingshucanjuan) || 0) * 100 + (Number(stock.bingshuquanjuan) || 0) * 1000 + (Number(stock.liutaobingshu) || 0) * 10000
+  })
+}
+
+async function executeGrowthUpgrade(row) {
+  const field = growthUpgradeField.value
+  if (!growthUpgradeCanConfirm(row)) return
+  growthUpgradeExecuting.value = true
+  targetError.value = ''
+  targetNotice.value = ''
+  try {
+    const key = growthUpgradeKeyFor(row, field)
+    const idempotencyKey = growthUpgradeExecutionKeys.get(key) || uuid()
+    growthUpgradeExecutionKeys.set(key, idempotencyKey)
+    const entry = currentMap.value[row.id] || row
+    const preview = await previewOperatorUpgrade({
+      accountId: props.accountId,
+      game: trackerGame(row),
+      operatorId: row.id,
+      dimension: field,
+      target: growthStepTarget(row, field),
+      expectedOperatorRevision: Number(entry.revision) || 0
+    })
+    if (!preview || !preview.available) throw new Error('当前状态无法升级，请重新确认')
+    const result = await executeOperatorUpgrade({
+      accountId: props.accountId,
+      game: trackerGame(row),
+      operatorId: row.id,
+      dimension: field,
+      target: growthStepTarget(row, field),
+      expectedOperatorRevision: Number(preview.operator_revision != null ? preview.operator_revision : preview.operatorRevision) || 0,
+      expectedInventoryRevision: Number(preview.inventory_revision != null ? preview.inventory_revision : preview.inventoryRevision) || 0,
+      previewToken: preview.preview_token || preview.previewToken,
+      idempotencyKey: idempotencyKey
+    })
+    applyUpgradeConsumption(result && result.consumed)
+    await loadInventory(true)
+    growthUpgradeKey.value = ''
+    growthUpgradeField.value = ''
+    growthUpgradePreviews.value = {}
+    growthUpgradeErrors.value = {}
+    targetNotice.value = field === 'level' ? '已升级并扣除库存' : '已提升修为并扣除库存'
+    if (targetNoticeTimer != null) clearTimeout(targetNoticeTimer)
+    targetNoticeTimer = setTimeout(function () { targetNotice.value = '' }, 2000)
+    emit('upgrade-applied', { operatorId: row.id })
+  } catch (err) {
+    targetError.value = targetErrorMessage(err, '升级失败')
+  } finally {
+    growthUpgradeExecuting.value = false
+  }
+}
+
+function opGapText(op) {
+  const current = currentMap.value[op.id] || {}
+  const draft = viewDraft.value[op.id]
+  if (!draft) return '未设置目标'
+  const level = calculateLevelRequirements(Number(current.level) || 0, Number(draft.level) || 0, firstSubProf(op))
+  const xiuwei = calculateXiuweiRequirements(Number(current.elite) || 0, Number(draft.elite) || 0, xiuweiJob(op.prof))
+  const net = netRequirement(mergeRequirements(level, xiuwei), currentItems.value)
+  const parts = (net.gaps || []).map(function (gap) {
+    return itemName(gap.id) + '×' + formatNumber(gap.gap)
+  })
+  const experienceGap = Math.max(level.experience - bookExperience(currentItems.value), 0)
+  if (experienceGap) parts.push('兵书经验×' + formatNumber(experienceGap))
+  return parts.length ? parts.join('、') : '当前目标材料已备齐'
+}
+
+function growthTargetReached(row) {
+  return Number(row.level) >= Number(row.targetLevel) && Number(row.elite) >= Number(row.targetElite)
+}
+
+function gapSummary(row) {
+  const parts = ((row && row.calculation && row.calculation.gaps) || []).map(function (gap) {
+    return itemName(gap.id) + '×' + formatNumber(gap.gap)
+  })
+  return parts.length ? parts.join('、') : '当前目标材料已备齐'
+}
+
 function selectViewOperator(entry) {
   if (!entry || !entry.id) return
   if (viewDraft.value[entry.id]) return
   viewDraft.value = Object.assign({}, viewDraft.value)
   viewDraft.value[entry.id] = viewDraftFor(entry)
   viewSelectedOrder.value = [entry.id].concat(viewSelectedOrder.value.filter(function (item) { return item !== entry.id }))
+  viewDirty.value = true
 }
 
 function clearViewSelected() {
@@ -1306,6 +1878,7 @@ function clearViewSelected() {
   viewSelectedOrder.value = []
   viewSavedIds.value = new Set()
   viewCompletedIds.value = new Set()
+  viewDirty.value = true
 }
 
 function removeViewOperator(id) {
@@ -1316,6 +1889,7 @@ function removeViewOperator(id) {
   const completed = new Set(viewCompletedIds.value)
   completed.delete(id)
   viewCompletedIds.value = completed
+  viewDirty.value = true
 }
 
 async function deleteViewRow(id) {
@@ -1353,6 +1927,7 @@ function isViewSelected(id) {
 }
 
 function markViewChanged(id) {
+  viewDirty.value = true
   if (!id || !viewCompletedIds.value.has(id)) return
   const next = new Set(viewCompletedIds.value)
   next.delete(id)
@@ -1369,6 +1944,10 @@ function closeViewEditor() {
   viewSearch.value = ''
   viewProfFilter.value = 'all'
   viewSubProfFilter.value = 'all'
+  viewOwnedOnly.value = false
+  viewDirty.value = false
+  viewConfirmOpen.value = false
+  viewConfirmMode.value = ''
 }
 
 async function saveViewTarget(mode) {
@@ -1648,14 +2227,57 @@ onBeforeUnmount(function () {
 .tracker-mode-body { margin-top: 14px }
 .tracker-mode-summary { display: flex; align-items: baseline; gap: 6px; color: var(--ink-60); font-size: 11px; font-weight: 800 }
 .tracker-mode-summary strong { color: var(--accent-strong); font: 900 16px var(--font-d) }
-.tracker-edit-button { display: inline-flex; min-height: 30px; align-items: center; gap: 4px; margin-left: auto; padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink-60); font: 800 10px var(--font-b); cursor: pointer }
+.tracker-mode-actions { display: flex; align-items: center; gap: 8px; margin-left: auto }
+.tracker-edit-button { display: inline-flex; min-height: 30px; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink-60); font: 800 10px var(--font-b); cursor: pointer }
 .tracker-edit-button:hover { border-color: var(--accent); color: var(--accent-strong) }
+.tracker-edit-button.on { border-color: var(--accent); background: rgba(166, 81, 74, .07); color: var(--accent-strong) }
 .tracker-edit-button:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 1px }
+.growth-allocation-panel { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--cream) }
+.growth-allocation-head { display: flex; flex: 1 1 100%; align-items: center; justify-content: space-between; gap: 8px }
+.allocation-mode { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface) }
+.allocation-mode button { min-height: 28px; padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-60); font: 800 10px var(--font-b); cursor: pointer }
+.allocation-mode button.on { background: var(--paper); color: var(--accent-strong); box-shadow: 0 1px 4px rgba(73, 59, 44, .16) }
+.allocation-reset { min-height: 28px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink-60); font: 800 10px var(--font-b); cursor: pointer }
+.allocation-reset:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong) }
+.allocation-reset:disabled { opacity: .5; cursor: not-allowed }
+.allocation-hint { flex: 1 1 100%; margin: 0; color: var(--ink-60); font-size: 10px; font-weight: 700 }
+.growth-allocation-list { display: flex; flex: 1 1 100%; flex-direction: column; gap: 6px }
+.growth-allocation-row { display: grid; grid-template-columns: 24px 22px minmax(0, 1fr) auto auto 74px; align-items: center; gap: 8px; min-width: 0; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); cursor: grab }
+.growth-allocation-row.ready { border-color: rgba(111, 159, 118, .45); background: rgba(191, 220, 192, .22) }
+.growth-allocation-row.dragging { opacity: .5; border-color: var(--accent); box-shadow: 0 6px 14px rgba(73, 59, 44, .14) }
+.allocation-rank { color: var(--ink-35); font-family: var(--font-d); font-weight: 800; text-align: center }
+.allocation-drag { color: var(--ink-35); font-size: 12px; line-height: 1; text-align: center; user-select: none }
+.allocation-unowned, .selected-unowned { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 99px; background: rgba(166, 81, 74, .08); color: #b44840; font-size: 9px; font-weight: 800; line-height: 1.5 }
+.selected-unowned { margin-left: 2px }
+.allocation-name { overflow: hidden; color: var(--ink); font: 800 10.5px var(--font-b); text-overflow: ellipsis; white-space: nowrap }
+.allocation-rarity { color: var(--ink-60); font-size: 10px; font-weight: 800 }
+.allocation-status { color: var(--ink-35); font-size: 10px; font-weight: 700; text-align: right }
+.growth-allocation-row.ready .allocation-status { color: #3f6b46; font-weight: 900 }
+.allocation-actions { display: inline-flex; justify-content: flex-end; gap: 4px }
+.allocation-actions button { width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink-60); font-size: 11px; cursor: pointer }
+.allocation-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong) }
+.allocation-actions button:disabled { opacity: .4; cursor: not-allowed }
 .tracker-view-editor select, .tracker-view-editor input { min-height: 32px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: 800 11px var(--font-b); outline: none }
 .tracker-view-editor select:focus, .tracker-view-editor input:focus { border-color: var(--accent) }
 .tracker-view-editor { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; margin-top: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--cream) }
+.tracker-view-confirm { position: fixed; z-index: 60; inset: 0; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(73, 59, 44, .32) }
+.tracker-view-confirm-box { width: min(320px, 100%); padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); box-shadow: 0 18px 44px rgba(73, 59, 44, .26) }
+.tracker-view-confirm-box h3 { margin: 0 0 4px; color: var(--ink); font: 900 14px var(--font-b) }
+.tracker-view-confirm-box p { margin: 0 0 12px; color: var(--ink-60); font-size: 10.5px; line-height: 1.5 }
+.tracker-view-confirm-actions { display: flex; justify-content: flex-end; gap: 8px }
+.tracker-view-confirm-actions button { min-height: 32px; padding: 5px 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink-60); font: 800 10.5px var(--font-b); cursor: pointer }
+.tracker-view-confirm-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong) }
+.tracker-view-confirm-actions button:first-child { border-color: rgba(111, 159, 118, .5); background: #f4f8f0; color: #3f6b46 }
+.tracker-view-confirm-actions button:disabled { opacity: .55; cursor: wait }
 .tracker-view-search { display: flex; flex: 1 1 100%; gap: 6px }
 .tracker-view-search input[type="search"] { flex: 1 1 260px; min-width: 180px }
+.tracker-owned-only { position: relative; display: inline-flex; min-height: 32px; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 99px; background: var(--paper); color: var(--ink-60); font: 700 10px var(--font-b); white-space: nowrap; cursor: pointer; transition: border-color .2s ease, background-color .2s ease, color .2s ease }
+.tracker-owned-only input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none }
+.tracker-owned-check { position: relative; flex: none; display: block; width: 14px; height: 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); transition: border-color .2s ease, background-color .2s ease }
+.tracker-owned-check i { position: absolute; left: 4px; top: 1px; display: none; width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) }
+.tracker-owned-only.on { border-color: rgba(166, 81, 74, .4); background: rgba(166, 81, 74, .08); color: var(--accent-strong) }
+.tracker-owned-only.on .tracker-owned-check { border-color: var(--accent-strong); background: var(--accent-strong) }
+.tracker-owned-only.on .tracker-owned-check i { display: block }
 .view-search-clear { flex: none; width: 32px; min-width: 32px; padding: 0 !important; border: 1px solid var(--line) !important; border-radius: 6px !important; background: var(--surface) !important; color: var(--ink-60) !important; font: 800 16px var(--font-b) !important; line-height: 1; cursor: pointer }
 .tracker-view-filters { display: flex; flex: 1 1 100%; flex-direction: column; gap: 6px }
 .tracker-view-filters .pf-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0 }
@@ -1677,11 +2299,16 @@ onBeforeUnmount(function () {
 .tracker-view-edit-row { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper) }
 .tracker-view-edit-head { display: flex; min-width: 150px; flex: 1; align-items: center; gap: 8px }
 .tracker-view-edit-head .tracker-avatar { width: 38px; height: 38px; border-radius: 9px; font-size: 16px }
+.tracker-compare { display: grid; grid-template-columns: 52px 1fr 1fr; gap: 3px 8px; min-width: 170px; width: 210px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--cream); font-size: 10px; font-weight: 700 }
+.tracker-compare-row { display: contents }
+.tracker-compare-row span { color: var(--ink-60) }
+.tracker-compare-row b { color: var(--ink); font-family: var(--font-d); text-align: right }
+.tracker-compare-row.head b { color: var(--accent-strong); font-family: var(--font-b); font-size: 9px }
+.tracker-compare-toggle { grid-column: 1 / -1; min-height: 24px; margin-top: 3px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink-60); font: 800 10px var(--font-b); cursor: pointer }
+.tracker-compare-toggle:hover { color: var(--accent-strong); border-color: var(--accent) }
+.tracker-compare-gap { grid-column: 1 / -1; padding: 5px 7px; border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 10px; line-height: 1.55 }
 .tracker-view-row-actions { display: inline-flex; flex: none; align-items: center; gap: 5px }
 .tracker-view-row-actions button { min-height: 28px; padding: 3px 10px; border-radius: 6px; font: 800 10px var(--font-b); cursor: pointer }
-.tracker-view-row-actions .row-save { border: 1px solid rgba(166, 81, 74, .4); background: var(--accent); color: #fff }
-.tracker-view-row-actions .row-save:disabled { opacity: .55; cursor: not-allowed }
-.tracker-view-row-actions .row-save.done { border-color: var(--line); background: var(--cream); color: var(--ink-35) }
 .tracker-view-row-actions .row-delete { border: 1px solid rgba(166, 81, 74, .3); background: var(--cream); color: var(--rouge) }
 .tracker-view-row-actions .row-delete:hover { background: var(--rouge); color: #fff }
 .tracker-view-results { display: grid; flex: 1 1 100%; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 7px; max-height: 300px; overflow-y: auto }
@@ -1766,19 +2393,62 @@ onBeforeUnmount(function () {
 .tracker-view-actions .tracker-view-save-all { padding: 4px 16px }
 .tracker-view-editor label { display: inline-flex; min-height: 32px; align-items: center; gap: 5px; color: var(--ink-60); font-size: 10px; font-weight: 800 }
 .tracker-view-editor label select, .tracker-view-editor label input { min-width: 74px; width: 74px }
-.growth-compact-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px }
-.growth-compact-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper) }
-.growth-compact-row .tracker-avatar { width: 40px; height: 40px; font-size: 17px }
-.growth-compact-name { min-width: 0; flex: 1 }
-.growth-compact-name h3 { overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap }
-.growth-compact-name p { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; color: var(--ink-60); font-size: 10px }
-.growth-compact-name p > span + span::before { content: '·'; margin-right: 4px }
-.growth-compact-stats { display: flex; flex: none; flex-wrap: wrap; gap: 8px; color: var(--ink-60); font-size: 10px; font-weight: 800 }
-.growth-compact-stats b { color: var(--ink); font-family: var(--font-d) }
-.growth-compact-stats em { color: var(--ink-35); font-style: normal }
-.growth-compact-gap { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0 }
-.growth-compact-gap .material-chip { min-height: 24px; padding: 3px 7px; font-size: 10px }
-.growth-compact-gap small { color: var(--ink-35); font-size: 10px; font-weight: 700; white-space: nowrap }
+.tracker-view-editor label .tracker-current-star { display: inline-flex; align-items: center; gap: 3px; color: var(--ink) }
+.tracker-view-editor label .tracker-current-star b { color: var(--accent-strong); font-family: var(--font-d); font-weight: 900 }
+.growth-compact-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 10px; align-items: start }
+.growth-compact-row { position: relative; display: flex; flex-direction: column; gap: 9px; min-width: 0; height: auto; padding: 12px; border: 1px solid var(--line); border-top: 2px solid var(--brand-blue); border-radius: 12px; background: var(--paper); box-shadow: 0 6px 16px rgba(73, 59, 44, .08) }
+.growth-compact-row > .growth-compact-head { flex: none }
+.growth-compact-row.rarity-r5 { border-top-color: var(--accent) }
+.growth-compact-row.rarity-r4 { border-top-color: #8672b2 }
+.growth-compact-head { display: flex; align-items: center; gap: 9px; min-width: 0 }
+.growth-compact-head .tracker-avatar { flex: none; width: 44px; height: 44px; border-radius: 10px; font-size: 17px }
+.growth-compact-title { min-width: 0; flex: 1 }
+.growth-compact-title h3 { margin: 0; overflow: hidden; color: var(--ink); font: 900 13px/1.3 var(--font-b); text-overflow: ellipsis; white-space: nowrap }
+.growth-compact-meta { display: flex; align-items: center; gap: 4px; margin: 3px 0 12px; color: var(--ink-60); font: 700 10px/1.4 var(--font-b) }
+.growth-compact-meta img { flex: none; width: 15px; height: 15px; object-fit: contain }
+.growth-compare { display: grid; grid-template-columns: 38px 1fr 1fr; gap: 5px 8px; align-items: center; margin-top: 8px; padding: 9px 8px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--cream) }
+.growth-compare-row { display: contents }
+.growth-compare-row span, .growth-compare-row b { min-height: 18px; font-size: 10px; line-height: 1.4 }
+.growth-compare-row.pair-row { grid-column: 1 / -1; display: grid; grid-template-columns: 38px 1fr auto 1fr; align-items: center; gap: 5px 8px }
+.growth-compare-row.pair-row i { color: var(--ink-35); font: 700 10px/1 var(--font-d); font-style: normal; text-align: center }
+.growth-compare-row span { align-self: center; color: var(--ink-60); font-weight: 800; text-align: left }
+.growth-compare-row b { color: var(--ink); font-family: var(--font-d); font-weight: 800; text-align: center }
+.growth-compare-row.head b { color: var(--accent-strong); font-family: var(--font-b); font-weight: 800 }
+.growth-compare-bar { grid-column: 1 / -1; height: 4px; margin: -1px 0 2px; overflow: hidden; border-radius: 99px; background: rgba(73, 59, 44, .12) }
+.growth-compare-bar i { display: block; height: 100%; border-radius: inherit; background: var(--brand-blue); transition: width .25s ease }
+.growth-compare-bar.done i { background: #5d8a5d }
+.growth-compare-gap { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: flex-start; align-content: flex-start; min-height: 80px; max-height: 80px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: rgba(73, 59, 44, .3) transparent; padding: 5px 4px 0 0; margin-top: 2px; border-top: 1px dashed rgba(73, 59, 44, .22); color: var(--ink-60); font: 700 10px/1.5 var(--font-b) }
+.growth-compare-gap::-webkit-scrollbar { width: 5px }
+.growth-compare-gap::-webkit-scrollbar-thumb { background: rgba(73, 59, 44, .32); border-radius: 99px }
+.growth-compare-gap b { display: block; flex: 1 0 100%; width: 100%; color: var(--ink); font-weight: 800; word-break: break-word }
+.growth-gap-ready { display: inline-flex; min-width: 96px; min-height: 28px; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 7px; background: rgba(73, 59, 44, .06); color: var(--ink-60); font: 800 10px var(--font-b); font-style: normal }
+.growth-gap-ready.is-unowned { color: #b44840; border-color: rgba(166, 81, 74, .38) }
+.growth-upgrade-bar { grid-column: 1 / -1; display: flex; min-height: 34px; align-items: center; justify-content: center; gap: 8px; margin-top: 1px; padding-top: 6px; border-top: 1px dashed rgba(73, 59, 44, .16) }
+.growth-upgrade-button { min-height: 26px; padding: 3px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink-60); font: 800 10px var(--font-b); cursor: pointer }
+.growth-upgrade-button.ready { border-color: rgba(111, 159, 118, .5); background: #f4f8f0; color: #3f6b46 }
+.growth-upgrade-button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); background: var(--cream) }
+.growth-upgrade-button:disabled { opacity: .55; cursor: wait }
+.growth-upgrade-pop { position: absolute; z-index: 10; left: 7px; right: 7px; top: calc(100% - 4px); padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); box-shadow: 0 10px 28px rgba(73, 59, 44, .22) }
+.growth-upgrade-pop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: var(--ink); font: 900 11px var(--font-b) }
+.growth-upgrade-pop-head button { flex: none; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--cream); color: var(--ink-60); font-size: 13px; line-height: 1; cursor: pointer }
+.growth-upgrade-pop-head button:hover:not(:disabled) { border-color: var(--rouge); color: var(--rouge) }
+.growth-upgrade-pop-row { padding: 6px 0; border-top: 1px dashed rgba(73, 59, 44, .16) }
+.growth-upgrade-pop-title { display: flex; align-items: center; gap: 6px; color: var(--ink-60); font-size: 10px; font-weight: 700 }
+.growth-upgrade-pop-title b { color: var(--ink); font: 900 10px var(--font-b) }
+.growth-upgrade-pop-title span { color: var(--accent-strong); font-family: var(--font-d); font-weight: 900 }
+.growth-upgrade-pop-state, .growth-upgrade-pop-error { margin-top: 5px; color: var(--ink-60); font-size: 9.5px }
+.growth-upgrade-pop-error { color: var(--rouge); font-weight: 700 }
+.growth-upgrade-pop-mats { display: flex; flex-wrap: wrap; gap: 4px 7px; margin-top: 5px }
+.growth-upgrade-pop-mats span { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--cream); color: var(--ink); font-size: 9.5px; font-weight: 700 }
+.growth-upgrade-pop-mats span.is-lack { border-color: rgba(166, 81, 74, .4); color: var(--rouge) }
+.growth-upgrade-pop-mats small { color: var(--ink-60); font-weight: 700 }
+.growth-upgrade-pop-blocked { display: block; margin-top: 4px; color: var(--rouge); font: 700 9.5px var(--font-b) }
+.growth-upgrade-pop-note { display: block; margin-top: 4px; color: var(--ink-60); font: italic 600 12px/1.45 var(--font-b) }
+.growth-upgrade-pop-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px dashed rgba(73, 59, 44, .16) }
+.growth-upgrade-pop-actions button { min-height: 28px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink-60); font: 800 10px var(--font-b); cursor: pointer }
+.growth-upgrade-pop-actions .growth-upgrade-pop-confirm { border-color: rgba(111, 159, 118, .5); background: #f4f8f0; color: #3f6b46 }
+.growth-upgrade-pop-actions .growth-upgrade-pop-confirm:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); background: var(--cream) }
+.growth-upgrade-pop-actions button:disabled { opacity: .5; cursor: not-allowed }
 .growth-clear { color: var(--ink-60); font-size: 10px; font-weight: 800 }
 .heart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px }
 .heart-cell { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper) }
@@ -1804,10 +2474,9 @@ onBeforeUnmount(function () {
   .eta-line { flex-direction: column; gap: 3px; }
   .tracker-mode-switch { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .tracker-mode-switch button { min-height: 38px; }
-  .growth-compact-row { flex-wrap: wrap; }
-  .growth-compact-stats { width: 100%; }
-  .growth-compact-gap { justify-content: flex-start; width: 100%; }
+  .growth-compact-list { grid-template-columns: 1fr; }
   .tracker-mode-summary { flex-wrap: wrap; }
+  .tracker-mode-actions { width: 100%; justify-content: flex-end; }
   .tracker-edit-button { margin-left: 0; }
   .tracker-view-editor { align-items: stretch; }
   .tracker-view-search input[type="search"] { width: 100%; min-width: 0; flex: auto }

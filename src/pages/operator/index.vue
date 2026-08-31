@@ -501,6 +501,7 @@
           <div v-if="visitedTabs.has('tracking')" v-show="activeTab === 'tracking'" class="panel" :class="{ 'is-active': activeTab === 'tracking' }">
             <OperatorGrowthTracker
               :account-id="accountId"
+              :game="saveGame"
               :current-entries="currentEntries"
               :catalog-entries="catalogOperators"
               :favorite-ids="favoriteAgentIds"
@@ -509,6 +510,7 @@
               :initial-current-items="cardMaterialStock"
               :initial-current-agents="cardHeartStock"
               :current-inventory-ready="cardMaterialLoadedAccount === accountId"
+              @upgrade-applied="handleTrackerUpgradeApplied"
             />
           </div>
 
@@ -3983,6 +3985,11 @@ async function onDeleteAccount(acc) {
   } finally {
     accountBusy.value = false
   }
+}
+
+function handleTrackerUpgradeApplied() {
+  reloadCurrent(true)
+  loadCardMaterialStock()
 }
 
 // —— 当前养成 ——
