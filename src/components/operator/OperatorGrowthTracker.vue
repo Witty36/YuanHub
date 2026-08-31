@@ -2179,8 +2179,9 @@ onBeforeUnmount(function () {
 .tracker-row { border: 1px solid var(--line); border-radius: 15px; background: var(--paper); padding: 15px; }
 .tracker-row-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .tracker-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.tracker-avatar { width: 48px; height: 48px; flex: none; overflow: hidden; display: grid; place-items: center; border: 2px solid var(--line); border-radius: 12px; background: var(--cream); color: var(--ink-35); font: 900 21px var(--font-s); }
-.tracker-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tracker-avatar { position: relative; width: 48px; height: 48px; flex: none; overflow: visible; display: flex; align-items: center; justify-content: center; border: 2px solid var(--line); border-radius: 10px; background: var(--cream); color: var(--ink-35); font: 900 21px var(--font-s); }
+.tracker-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: 8px; }
+.tracker-avatar > span { display: grid; width: 100%; height: 100%; place-items: center; }
 .tracker-avatar.rarity-r5 { border-color: var(--accent); }
 .tracker-avatar.rarity-r4 { border-color: var(--brand-blue); }
 .tracker-identity h3 { overflow: hidden; color: var(--ink); font-size: 15px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
