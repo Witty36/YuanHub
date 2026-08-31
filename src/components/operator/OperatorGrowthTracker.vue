@@ -159,7 +159,7 @@
               </div>
             </div>
             <div class="tracker-view-results">
-              <button v-for="op in viewSearchOptions" :key="op.id" type="button" class="tracker-view-result" :class="[{ on: isViewSelected(op.id) }, 'rarity-r' + (op.rarity || 3)]" @click="addToEditorAndGroup(op)">
+              <button v-for="op in viewSearchOptions" :key="op.id" type="button" class="tracker-view-result" :class="[{ on: isViewSelected(op.id) }, 'rarity-r' + (op.rarity || 3)]" @click="selectViewOperator(op)">
                 <span class="tracker-avatar">
                   <img v-if="op.avatar" :src="avatarUrl(op.avatar)" :alt="op.name" loading="lazy" />
                   <span v-else>{{ monogram(op) }}</span>
@@ -170,33 +170,12 @@
               </button>
               <p v-if="!viewSearchOptions.length" class="tracker-view-empty">没有匹配的密探</p>
             </div>
-            <div class="editor-groups">
-              <div class="editor-groups-head">
-                <h3>养成分组</h3>
-                <div class="group-create">
-                  <input v-model.trim="viewerGroupName" type="text" placeholder="分组名称" aria-label="分组名称" />
-                  <button type="button" @click="createViewerGroup">新建分组</button>
-                </div>
-              </div>
-              <p v-if="!viewerGroups.length" class="editor-groups-hint">先新建一个分组，再点上方密探卡片加入该组并编辑目标。</p>
-              <div class="editor-groups-list">
-                <span class="editor-group-chip ungrouped" :class="{ active: viewerActiveGroupId === VIEWER_UNGROUPED_ID }" @click="viewerActiveGroupId = VIEWER_UNGROUPED_ID">
-                  <b>默认分组</b>
-                  <em>{{ viewerUngroupedIds.size }} 位</em>
-                </span>
-                <span v-for="group in viewerGroups" :key="group.id" class="editor-group-chip" :class="{ active: viewerActiveGroupId === group.id }" @click="viewerActiveGroupId = group.id">
-                  <b>{{ group.name }}</b>
-                  <em>{{ (group.operatorIds || []).length }} 位</em>
-                </span>
-              </div>
-              <p class="editor-groups-hint">点选分组后，上方密探会加入该组；未选择分组时，密探会出现在默认分组。</p>
-            </div>
-            <div v-if="viewerActiveGroupEntries.length" class="tracker-view-selected">
+            <div v-if="selectedViewOperators.length" class="tracker-view-selected">
               <div class="tracker-view-selected-head">
-                <strong>{{ viewerActiveGroup ? viewerActiveGroup.name : '分组' }} · {{ viewerActiveGroupEntries.length }} 位密探</strong>
-                <button type="button" class="tracker-view-clear" @click="clearActiveGroupView">清空分组</button>
+                <strong>已选 {{ selectedViewOperators.length }} 位密探</strong>
+                <button type="button" class="tracker-view-clear" @click="clearViewSelected">清空</button>
               </div>
-              <div v-for="op in viewerActiveGroupEntries" :key="op.id" class="tracker-view-edit-row">
+              <div v-for="op in selectedViewOperators" :key="op.id" class="tracker-view-edit-row">
                 <div class="tracker-view-edit-head">
                   <div class="tracker-avatar" :class="'rarity-r' + (op.rarity || 3)">
                     <img v-if="op.avatar" :src="avatarUrl(op.avatar)" :alt="op.name" loading="lazy" />
@@ -211,11 +190,11 @@
                 <label>目标修为 <input v-model.number="viewDraft[op.id].elite" type="number" min="0" max="17" @input="markViewChanged(op.id)" /></label>
                 <div class="tracker-view-row-actions">
                   <button type="button" class="row-save" :class="{ done: viewCompletedIds.has(op.id) }" :disabled="viewSaving || viewSavedIds.has(op.id) || viewCompletedIds.has(op.id)" @click="saveViewRow('growth', op.id)">{{ viewSavedIds.has(op.id) ? '保存中…' : '保存' }}</button>
-                  <button type="button" class="row-delete" :disabled="viewSaving || viewSavedIds.has(op.id)" @click="removeGroupMemberData(op.id)">删除</button>
+                  <button type="button" class="row-delete" :disabled="viewSaving || viewSavedIds.has(op.id)" @click="deleteViewRow(op.id)">删除</button>
                 </div>
               </div>
             </div>
-            <p v-else class="editor-groups-hint">该分组还没有密探，从上方筛选面板选择密探加入。</p>
+            <p v-else class="editor-groups-hint">还没有选择密探，从上方筛选面板点击密探加入。</p>
             <div class="tracker-view-actions">
               <button type="button" class="tracker-view-save-all" :disabled="viewSaving" @click="saveViewTarget('growth')">{{ viewSaving ? '保存中…' : '编辑完成（' + selectedViewOperators.length + '）' }}</button>
             </div>
@@ -232,76 +211,6 @@
               </span>
             </div>
             <p class="aggregate-eta">{{ growthAggregateEtaLabel }}</p>
-          </section>
-          <section v-if="allGroupBoard.rows.length" class="group-stats-page">
-            <div class="aggregate-head">
-              <div><h3>总看板</h3><p>统计所有分组、所有密探的最高目标的情况，未加入分组的密探也一并统计。</p></div>
-              <span>缺项 {{ allGroupBoard.aggregate.gapCount }} · 五铢钱 {{ formatMoney(allGroupBoard.aggregate.total.money) }}</span>
-            </div>
-            <div v-if="!allGroupBoard.aggregate.gapCount" class="materials-clear">当前全局目标材料已备齐</div>
-            <div v-else class="material-chips">
-              <span v-for="gap in allGroupBoard.aggregate.gaps" :key="gap.id" class="material-chip">
-                <b>{{ itemName(gap.id) }}</b><em>缺 {{ formatNumber(gap.gap) }}</em><small>{{ rateLabel(gap.id) }}</small>
-              </span>
-            </div>
-            <div class="group-union-rows">
-              <span v-for="row in allGroupBoard.rows" :key="row.id" class="group-union-row">
-                <b>{{ row.name || row.id }}</b>
-                <em>{{ row.targetText }}</em>
-                <small>{{ row.gapText }}</small>
-              </span>
-            </div>
-          </section>
-          <section v-if="viewerGroupStatCards.length" class="group-stats-page">
-            <div class="aggregate-head">
-              <div><h3>分组缺口</h3><p>每个分组各自缺多少，按组内已保存目标计算；同一密探可同时出现在多个活动分组。</p></div>
-            </div>
-            <div class="group-stats-grid">
-              <article v-for="card in viewerGroupStatCards" :key="card.id" class="group-stats-card">
-                <div class="group-stats-head">
-                  <input v-if="viewerEditingGroupId === card.id" v-model="card.group.name" type="text" class="group-stats-name-input" @keydown.enter="updateViewerGroupName(card.group); viewerEditingGroupId = ''" @blur="updateViewerGroupName(card.group); viewerEditingGroupId = ''" />
-                  <h4 v-else>{{ card.name }}</h4>
-                  <span>{{ card.count }} 位密探</span>
-                  <label class="group-stats-union-check" title="把该分组纳入并集统计"><input type="checkbox" :checked="viewerSelectedGroupIds.has(card.id)" @change="toggleViewerGroupSelected(card.id)" />并集</label>
-                  <span class="group-stats-controls">
-                    <button type="button" title="重命名" @click="viewerEditingGroupId = card.id">✎</button>
-                    <button type="button" title="删除分组" @click="removeViewerGroup(card.id)">✕</button>
-                  </span>
-                </div>
-                <div v-if="!card.aggregate.gapCount" class="materials-clear">该分组材料已备齐</div>
-                <div v-else class="material-chips">
-                  <span v-for="gap in card.aggregate.gaps" :key="gap.id" class="material-chip">
-                    <b>{{ itemName(gap.id) }}</b><em>缺 {{ formatNumber(gap.gap) }}</em><small>{{ rateLabel(gap.id) }}</small>
-                  </span>
-                </div>
-                <div class="group-stats-rows">
-                  <div v-for="row in card.rows" :key="row.id" class="group-stats-row">
-                    <b>{{ row.name || row.id }}</b>
-                    <em>{{ row.targetText }}</em>
-                    <small>{{ row.gapText }}</small>
-                  </div>
-                </div>
-              </article>
-            </div>
-            <section v-if="selectedGroupAggregate" class="group-stats-union">
-              <div class="aggregate-head">
-                <div><h3>选中分组统计</h3><p>{{ selectedGroupIdsLabel }}，重叠密探取最高目标；未勾选的分组不计入。</p></div>
-                <span>缺项 {{ selectedGroupAggregate.gapCount }} · 五铢钱 {{ formatMoney(selectedGroupAggregate.total.money) }}</span>
-              </div>
-              <div v-if="!selectedGroupAggregate.gapCount" class="materials-clear">所选分组材料已备齐</div>
-              <div v-else class="material-chips">
-                <span v-for="gap in selectedGroupAggregate.gaps" :key="gap.id" class="material-chip">
-                  <b>{{ itemName(gap.id) }}</b><em>缺 {{ formatNumber(gap.gap) }}</em><small>{{ rateLabel(gap.id) }}</small>
-                </span>
-              </div>
-              <div class="group-union-rows">
-                <span v-for="row in selectedGroupRows" :key="row.id" class="group-union-row">
-                  <b>{{ row.name || row.id }}</b>
-                  <em>{{ row.targetText }}</em>
-                  <small>{{ row.gapText }}</small>
-                </span>
-              </div>
-            </section>
           </section>
           <div v-if="!growthRows.length" class="tracker-state empty">还没有设置练度目标的密探，点“编辑目标”添加。</div>
           <div v-else class="growth-compact-list">
@@ -1376,8 +1285,8 @@ function viewDraftFor(entry) {
   const current = currentMap.value[id] || {}
   const saved = targets.value[id] || {}
   const draft = {
-    level: saved.level != null ? Number(saved.level) : Number(current.level) || 100,
-    elite: saved.elite != null ? Number(saved.elite) : Number(current.elite) || 17,
+    level: saved.level != null ? Number(saved.level) : 100,
+    elite: saved.elite != null ? Number(saved.elite) : 17,
     starLevel: saved.starLevel != null ? Number(saved.starLevel) : Number(current.starLevel) || 7
   }
   viewDraft.value = Object.assign({}, viewDraft.value, { [id]: draft })
@@ -1464,7 +1373,11 @@ function closeViewEditor() {
 
 async function saveViewTarget(mode) {
   const ids = Object.keys(viewDraft.value)
-  if (!ids.length || viewSaving.value) return
+  if (!ids.length) {
+    closeViewEditor()
+    return
+  }
+  if (viewSaving.value) return
   viewSaving.value = true
   targetError.value = ''
   targetNotice.value = ''
